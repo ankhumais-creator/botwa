@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WhatsApp AI Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+
+        .chat-bubble {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <div class="w-64 bg-gray-950 border-r border-gray-800 flex flex-col p-4">
+        <div class="flex items-center gap-2 mb-8 px-2">
+            <div class="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center font-bold text-black">WA</div>
+            <h1 class="text-lg font-bold tracking-tight">AI Command</h1>
+        </div>
+
+        <nav class="flex-1 space-y-1">
+            <button onclick="showTab('dashboard')" id="nav-dashboard"
+                class="w-full text-left px-4 py-2 rounded-lg bg-gray-800 text-white font-medium transition">📊
+                Dashboard</button>
+            <button onclick="showTab('settings')" id="nav-settings"
+                class="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-800 text-gray-400 font-medium transition">⚙️
+                Settings</button>
+        </nav>
+
+        <div class="mt-4 px-4">
+            <div class="bg-gray-800 p-2 rounded-lg">
+                <label class="text-xs text-gray-500 font-semibold uppercase">Manual Chat / Pause</label>
+                <div class="flex gap-2 mt-2">
+                    <input type="text" id="inp-new-chat"
+                        class="w-full bg-gray-900 border-none rounded text-xs px-2 py-1 text-white focus:ring-1 focus:ring-green-500 outline-none"
+                        placeholder="628123456789" onkeypress="handleNewChat(event)">
+                    <button onclick="openManualChat()"
+                        class="bg-gray-700 hover:bg-green-600 text-white p-1 rounded transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-auto">
+            <div id="status-badge"
+                class="px-4 py-2 rounded-lg bg-red-900/50 border border-red-800 text-red-200 text-sm flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col relative">
+
+        <!-- DASHBOARD TAB -->
+        <main id="tab-dashboard" class="flex-1 p-6 flex gap-6 h-full overflow-hidden">
+            <!-- Left: Chat Stream / Active Chat -->
+            <div class="flex-1 flex flex-col glass rounded-2xl overflow-hidden relative">
+
+                <!-- Chat Header (Active Chat Info) -->
+                <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50">
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center font-bold text-white text-lg">
+                            <span id="header-avatar">?</span>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-gray-200" id="header-name">No Chat Selected</h2>
+                            <p class="text-xs text-gray-500" id="header-status">Select or enter number to manage</p>
+                        </div>
+                    </div>
+
+                    <!-- Bot Toggle -->
+                    <div id="controls-area" class="opacity-50 pointer-events-none transition flex items-center gap-4">
+                        <div
+                            class="flex items-center gap-2 bg-gray-800 rounded-full p-1 pl-3 pr-1 border border-gray-700">
+                            <span class="text-xs font-semibold text-gray-400">AI MODE</span>
+                            <button onclick="toggleBot()" id="btn-toggle-bot"
+                                class="w-12 h-6 rounded-full bg-green-500 relative transition-colors duration-300">
+                                <div class="w-4 h-4 rounded-full bg-white absolute top-1 left-7 transition-all duration-300 shadow-sm"
+                                    id="toggle-circle"></div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Stream -->
+                <div id="chat-stream" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900/30">
+                    <div class="text-center text-gray-500 mt-20" id="empty-state">Waiting for selection...</div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-4 bg-gray-900 border-t border-gray-800">
+                    <div class="relative">
+                        <input type="text" id="inp-message"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-xl pl-4 pr-12 py-3 focus:ring-2 focus:ring-green-500 outline-none text-white placeholder-gray-500 transition"
+                            placeholder="Select a chat to reply..." disabled onkeypress="handleEnter(event)">
+                        <button onclick="sendMessage()" id="btn-send"
+                            class="absolute right-2 top-2 p-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path
+                                    d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: QR & Info -->
+            <div class="w-80 flex flex-col gap-6">
+                <!-- QR Card -->
+                <div id="qr-card"
+                    class="glass rounded-2xl p-6 flex flex-col items-center justify-center text-center hidden">
+                    <h3 class="text-lg font-medium mb-4">Scan to Connect</h3>
+                    <div id="qrcode" class="bg-white p-2 rounded-lg"></div>
+                    <p class="text-xs text-gray-500 mt-4">Open WhatsApp > Linked Devices</p>
+                </div>
+
+                <!-- Stats Card -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xs font-uppercase tracking-wider text-gray-500 mb-4">SYSTEM STATUS</h3>
+
+                    <div class="space-y-4">
+                        <div>
+                            <div class="text-xs text-gray-400 mb-1">Active Model</div>
+                            <div class="font-mono text-green-400 truncate" id="stat-model">Loading...</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-400 mb-1">Queue Status</div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                                <span class="text-sm">Ready</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tips -->
+                <div
+                    class="glass rounded-2xl p-6 bg-gradient-to-b from-gray-800/50 to-transparent border-t border-gray-700">
+                    <h3 class="text-sm font-bold text-white mb-2">💡 CS Tips</h3>
+                    <p class="text-xs text-gray-400 leading-relaxed">
+                        Enter a number (e.g. 628123...) in the sidebar to <strong>Pause AI</strong> for that customer
+                        before they even chat.
+                    </p>
+                </div>
+            </div>
+        </main>
+
+        <!-- SETTINGS TAB (Unchanged) -->
+        <main id="tab-settings" class="hidden flex-1 p-8 overflow-y-auto">
+            <div class="max-w-2xl mx-auto space-y-6">
+                <h2 class="text-2xl font-bold mb-6">Bot Configuration</h2>
+
+                <div class="glass rounded-2xl p-6 space-y-4">
+                    <h3 class="text-lg font-medium border-b border-gray-700 pb-2">AI Provider</h3>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">API Base URL</label>
+                        <input type="text" id="inp-baseUrl"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 outline-none"
+                            placeholder="https://openrouter.ai/api/v1">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">API Key</label>
+                        <input type="password" id="inp-apiKey"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Model Name</label>
+                        <input type="text" id="inp-modelName"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 outline-none"
+                            placeholder="google/gemma-3n-e4b-it">
+                        <p class="text-xs text-gray-500 mt-1">Recommended: google/gemma-3n-e4b-it</p>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-6 space-y-4">
+                    <h3 class="text-lg font-medium border-b border-gray-700 pb-2">Persona</h3>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">System Prompt</label>
+                        <textarea id="inp-systemPrompt" rows="4"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 outline-none"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">Define how the bot should behave.</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button onclick="saveSettings()"
+                        class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-medium transition">Save
+                        Changes</button>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        const socket = io();
+
+        // --- State Management ---
+        let currentChatJid = null;
+        let pausedChats = new Set(); // Sync with backend
+
+        const els = {
+            statusBadge: document.getElementById('status-badge'),
+            statusText: document.getElementById('status-text'),
+            chatStream: document.getElementById('chat-stream'),
+            qrCard: document.getElementById('qr-card'),
+            qrCode: document.getElementById('qrcode'),
+            inputs: {
+                baseUrl: document.getElementById('inp-baseUrl'),
+                apiKey: document.getElementById('inp-apiKey'),
+                modelName: document.getElementById('inp-modelName'),
+                systemPrompt: document.getElementById('inp-systemPrompt')
+            },
+            statModel: document.getElementById('stat-model'),
+            // New CS Controls
+            headerName: document.getElementById('header-name'),
+            headerStatus: document.getElementById('header-status'),
+            headerAvatar: document.getElementById('header-avatar'),
+            controlsArea: document.getElementById('controls-area'),
+            toggleBtn: document.getElementById('btn-toggle-bot'),
+            toggleCircle: document.getElementById('toggle-circle'),
+            inpMessage: document.getElementById('inp-message'),
+            btnSend: document.getElementById('btn-send'),
+            emptyState: document.getElementById('empty-state')
+        };
+
+        // --- Functions ---
+        function showTab(id) {
+            document.querySelectorAll('main').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${id}`).classList.remove('hidden');
+
+            // Update Nav styles
+            document.getElementById('nav-dashboard').classList.remove('bg-gray-800', 'text-white');
+            document.getElementById('nav-settings').classList.remove('bg-gray-800', 'text-white');
+            document.getElementById('nav-dashboard').classList.add('text-gray-400');
+            document.getElementById('nav-settings').classList.add('text-gray-400');
+
+            document.getElementById(`nav-${id}`).classList.add('bg-gray-800', 'text-white');
+            document.getElementById(`nav-${id}`).classList.remove('text-gray-400');
+        }
+
+        function updateStatus(status) {
+            const colors = {
+                'connected': 'bg-green-900/50 border-green-800 text-green-200',
+                'disconnected': 'bg-red-900/50 border-red-800 text-red-200',
+                'waiting_for_scan': 'bg-yellow-900/50 border-yellow-800 text-yellow-200'
+            };
+            const dotSelect = {
+                'connected': 'bg-green-500',
+                'disconnected': 'bg-red-500',
+                'waiting_for_scan': 'bg-yellow-500'
+            };
+
+            els.statusBadge.className = `px-4 py-2 rounded-lg border text-sm flex items-center gap-2 ${colors[status] || colors.disconnected}`;
+            els.statusBadge.querySelector('span').className = `w-2 h-2 rounded-full animate-pulse ${dotSelect[status] || 'bg-gray-500'}`;
+            els.statusText.innerText = status.replace(/_/g, ' ').toUpperCase();
+
+            // Show QR only if waiting
+            els.qrCard.classList.toggle('hidden', status !== 'waiting_for_scan');
+        }
+
+        function appendLog(data) {
+            if (els.emptyState) els.emptyState.remove();
+
+            const isBot = data.direction === 'out';
+            // Align: Bot Right, User Left.
+            // But if it's manual sent by us, it's also 'out', but maybe style differently?
+            const align = isBot ? 'items-end' : 'items-start';
+
+            let bubbleColor = isBot ? 'bg-green-600/20 border-green-500/30' : 'bg-gray-700/50 border-gray-600/30';
+            if (data.manual) bubbleColor = 'bg-blue-600/20 border-blue-500/30'; // Manual reply color
+
+            const remoteJid = data.msg?.key?.remoteJid || data.remoteJid;
+            const user = isBot ? (data.manual ? 'Human Operator' : 'AI Bot') : remoteJid.replace('@s.whatsapp.net', '');
+
+            const text = data.text ||
+                data.msg?.message?.conversation ||
+                data.msg?.message?.extendedTextMessage?.text;
+
+            if (!text) return;
+
+            const html = `
+                <div class="flex flex-col ${align} chat-bubble cursor-pointer group" onclick="selectChat('${remoteJid}')">
+                    <div class="text-xs text-gray-500 mb-1 group-hover:text-white transition">${user}</div>
+                    <div class="max-w-xl rounded-2xl p-3 border ${bubbleColor} text-sm shadow-sm relative group-hover:shadow-md transition">
+                        ${text}
+                    </div>
+                </div>
+            `;
+
+            els.chatStream.insertAdjacentHTML('beforeend', html);
+            els.chatStream.scrollTop = els.chatStream.scrollHeight;
+        }
+
+        // --- CS Logic ---
+        function selectChat(jid) {
+            if (!jid) return;
+            currentChatJid = jid;
+
+            const shortName = jid.replace('@s.whatsapp.net', '');
+            els.headerName.innerText = shortName;
+            els.headerAvatar.innerText = shortName.substring(0, 2).toUpperCase();
+
+            // Enable controls
+            els.controlsArea.classList.remove('opacity-50', 'pointer-events-none');
+            els.inpMessage.disabled = false;
+            els.btnSend.disabled = false;
+            els.inpMessage.placeholder = `Reply to ${shortName}...`;
+            els.headerStatus.innerText = "Active Chat";
+            els.inpMessage.focus();
+
+            // Update toggle state
+            updateToggleVisuals();
+        }
+
+        function updateToggleVisuals() {
+            const isPaused = pausedChats.has(currentChatJid);
+
+            if (isPaused) {
+                // AI OFF / HUMAN MODE
+                els.toggleBtn.classList.replace('bg-green-500', 'bg-gray-600');
+                els.toggleCircle.classList.replace('left-7', 'left-1');
+            } else {
+                // AI ON
+                els.toggleBtn.classList.replace('bg-gray-600', 'bg-green-500');
+                els.toggleCircle.classList.replace('left-1', 'left-7');
+            }
+        }
+
+        async function toggleBot() {
+            if (!currentChatJid) return;
+
+            const isPaused = pausedChats.has(currentChatJid);
+            const action = isPaused ? 'resume' : 'pause'; // Toggle
+
+            const res = await fetch('/api/toggle-bot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ remoteJid: currentChatJid, action })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                if (data.isPaused) pausedChats.add(currentChatJid);
+                else pausedChats.delete(currentChatJid);
+                updateToggleVisuals();
+            }
+        }
+
+        async function sendMessage() {
+            const text = els.inpMessage.value.trim();
+            if (!text || !currentChatJid) return;
+
+            els.inpMessage.value = ''; // Clear early
+
+            const res = await fetch('/api/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ remoteJid: currentChatJid, text })
+            });
+
+            // Log will come via socket
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        function handleNewChat(e) {
+            if (e.key === 'Enter') openManualChat();
+        }
+
+        function openManualChat() {
+            const raw = document.getElementById('inp-new-chat').value.trim();
+            if (!raw) return;
+
+            // Normalize phone number (simple logic)
+            // Assumes input is like 62812... or 0812... 
+            let jid = raw.replace(/\D/g, '');
+            if (jid.startsWith('0')) jid = '62' + jid.slice(1);
+            if (!jid.endsWith('@s.whatsapp.net')) jid += '@s.whatsapp.net';
+
+            selectChat(jid);
+            alert(`Selected chat: ${jid}. You can now pause AI or send message.`);
+            document.getElementById('inp-new-chat').value = '';
+        }
+
+        // --- Init & Fetch ---
+        async function fetchSettings() {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+
+            updateStatus(data.status);
+
+            // Fill Inputs
+            els.inputs.baseUrl.value = data.config.baseUrl;
+            els.inputs.apiKey.value = data.config.apiKey;
+            els.inputs.modelName.value = data.config.modelName;
+            els.inputs.systemPrompt.value = data.config.systemPrompt;
+            els.statModel.innerText = data.config.modelName;
+
+            // Sync Paused Chats
+            pausedChats = new Set(data.pausedChats || []);
+
+            if (data.qr) {
+                new QRCode(els.qrCode, { text: data.qr, width: 128, height: 128 });
+                updateStatus('waiting_for_scan');
+            }
+        }
+
+        async function saveSettings() {
+            const body = {
+                baseUrl: els.inputs.baseUrl.value,
+                apiKey: els.inputs.apiKey.value,
+                modelName: els.inputs.modelName.value,
+                systemPrompt: els.inputs.systemPrompt.value
+            };
+
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert('Settings Saved!');
+                els.statModel.innerText = body.modelName;
+            }
+        }
+
+        // --- Socket Events ---
+        socket.on('status', (status) => updateStatus(status));
+        socket.on('qr', (qr) => { if (qr) new QRCode(els.qrCode, { text: qr }); });
+        socket.on('msg_log', (data) => appendLog(data));
+        socket.on('paused_update', (data) => {
+            if (data.isPaused) pausedChats.add(data.remoteJid);
+            else pausedChats.delete(data.remoteJid);
+            if (currentChatJid === data.remoteJid) updateToggleVisuals();
+        });
+
+        // Init
+        fetchSettings();
+
+    </script>
+</body>
+
+</html>
