@@ -1,6 +1,6 @@
 
 const express = require('express');
-const http = require('http');
+const http = require('node:http');
 const { Server } = require('socket.io');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
@@ -8,8 +8,8 @@ const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const OpenAI = require('openai');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 require('dotenv').config();
 
 // --- Configuration & State ---
@@ -19,6 +19,16 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(cors());
 app.use(express.json());
+
+// Disable browser cache for all files
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    next();
+});
+
 app.use(express.static('public')); // Serve the dashboard
 
 let sock;
@@ -31,6 +41,20 @@ let currentConfig = {
 let qrCodeData = null;
 let status = 'disconnected';
 const pausedChats = new Set(); // Track chats where AI is disabled
+const conversations = {}; // JID -> { jid, name, messages, lastMessage, isPaused }
+
+// Helper to update conversation and notify frontend
+function updateConversation(jid, msgObj) {
+    if (!conversations[jid]) {
+        conversations[jid] = { jid, name: jid.replace('@s.whatsapp.net', ''), messages: [], lastMessage: Date.now(), isPaused: pausedChats.has(jid) };
+    }
+    if (msgObj && !conversations[jid].messages.some(m => m.id === msgObj.id)) {
+        conversations[jid].messages.push(msgObj);
+        if (conversations[jid].messages.length > 50) conversations[jid].messages.shift();
+    }
+    conversations[jid].lastMessage = msgObj?.timestamp || Date.now();
+    io.emit('conversation_update', { jid, conversation: conversations[jid] });
+}
 
 // --- OpenAI Client Factory ---
 function getAIClient() {
@@ -148,6 +172,55 @@ app.get('/api/status', (req, res) => {
     res.json({ status, qr: qrCodeData, config: currentConfig, pausedChats: Array.from(pausedChats) });
 });
 
+app.get('/api/conversations', (req, res) => {
+    const summary = Object.values(conversations).map(c => ({
+        jid: c.jid,
+        name: c.name,
+        lastMessage: c.lastMessage,
+        lastText: c.messages[c.messages.length - 1]?.text || '',
+        isPaused: c.isPaused
+    }));
+    res.json(summary);
+});
+
+app.get('/api/conversation/:jid', (req, res) => {
+    const { jid } = req.params;
+    res.json(conversations[jid] || { jid, name: jid, messages: [] });
+});
+
+app.put('/api/contact/:jid', (req, res) => {
+    const { jid } = req.params;
+    const { name } = req.body;
+    if (conversations[jid]) {
+        conversations[jid].name = name;
+        io.emit('contact_updated', { jid, name });
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Contact not found' });
+    }
+});
+
+app.delete('/api/contact/:jid', (req, res) => {
+    const { jid } = req.params;
+    if (conversations[jid]) {
+        delete conversations[jid];
+        io.emit('contact_deleted', { jid });
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Contact not found' });
+    }
+});
+
+app.delete('/api/message', (req, res) => {
+    const { jid, messageId } = req.body;
+    if (conversations[jid]) {
+        conversations[jid].messages = conversations[jid].messages.filter(m => m.id !== messageId);
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Chat not found' });
+    }
+});
+
 app.post('/api/settings', (req, res) => {
     const { apiKey, baseUrl, modelName, systemPrompt } = req.body;
     currentConfig = { ...currentConfig, apiKey, baseUrl, modelName, systemPrompt };
@@ -161,7 +234,7 @@ app.post('/api/settings', (req, res) => {
 
 app.post('/api/send', async (req, res) => {
     const { remoteJid, text } = req.body;
-    if (!status === 'connected' || !sock) return res.status(500).json({ error: 'Bot not connected' });
+    if (status !== 'connected' || !sock) return res.status(500).json({ error: 'Bot not connected' });
 
     try {
         await sock.sendMessage(remoteJid, { text });
