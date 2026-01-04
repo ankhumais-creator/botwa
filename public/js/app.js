@@ -177,8 +177,11 @@ function createMessageHTML(msg) {
         badge = '<span class="text-[10px] text-blue-500 mr-1">👤</span>';
     }
 
+    // Optimistic message indicator
+    const optimisticClass = msg.isOptimistic ? 'optimistic-msg' : '';
+
     return `
-        <div class="msg-row flex ${alignClass} mb-1 animate-fadeInUp">
+        <div class="msg-row flex ${alignClass} mb-1 animate-fadeInUp ${optimisticClass}" data-msg-id="${msg.id}">
             <div class="${bgClass} rounded-lg p-2 px-3 shadow-sm max-w-[65%] relative group">
                 <div class="text-[14.2px] text-[#111b21] leading-[19px] whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
                 <div class="flex items-center justify-end gap-1 mt-1">
@@ -198,16 +201,54 @@ async function sendMessage() {
     const text = els.messageInput.value.trim();
     if (!text || !currentJid) return;
 
+    // Clear input immediately for instant feedback
     els.messageInput.value = '';
 
+    // OPTIMISTIC UI UPDATE: Show message instantly
+    const optimisticMessage = {
+        id: 'temp-' + Date.now(),
+        text: text,
+        fromMe: true,
+        timestamp: Date.now(),
+        type: 'manual',
+        isOptimistic: true // Flag untuk tracking
+    };
+
+    // Tambahkan ke conversation di memory
+    if (conversations[currentJid]?.messages) {
+        conversations[currentJid].messages.push(optimisticMessage);
+    }
+
+    // Render langsung ke UI (instant feedback!)
+    const messageHTML = createMessageHTML(optimisticMessage);
+    els.messages.insertAdjacentHTML('beforeend', messageHTML);
+    els.messages.scrollTop = els.messages.scrollHeight;
+
+    console.log('📤 Message displayed (optimistic)');
+
+    // Kirim ke server di background
     try {
-        await fetch('/api/send', {
+        const response = await fetch('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remoteJid: currentJid, text })
         });
+
+        if (!response.ok) {
+            throw new Error('Send failed');
+        }
+
+        console.log('✅ Message sent to server');
+        // Server akan kirim update via socket.io, yang akan replace optimistic message
     } catch (err) {
-        console.error('Send error:', err);
+        console.error('❌ Send error:', err);
+
+        // Tampilkan error indicator pada message
+        const tempMsg = els.messages.querySelector(`[data-msg-id="${optimisticMessage.id}"]`);
+        if (tempMsg) {
+            tempMsg.classList.add('opacity-50');
+            tempMsg.innerHTML += '<span class="text-red-500 text-xs ml-2">❌ Failed</span>';
+        }
     }
 }
 
