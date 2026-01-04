@@ -121,6 +121,15 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
+                            <!-- Search Button -->
+                            <button id="btn-search-messages" type="button" title="Search messages"
+                                class="text-[#54656f] hover:text-[#00a884] transition-colors">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                    <path
+                                        d="M15.009 13.805h-.636l-.22-.219a5.184 5.184 0 0 0 1.256-3.386 5.207 5.207 0 1 0-5.207 5.208 5.183 5.183 0 0 0 3.385-1.255l.221.22v.635l4.004 3.999 1.194-1.195-3.997-4.007zm-4.808 0a3.605 3.605 0 1 1 0-7.21 3.605 3.605 0 0 1 0 7.21z" />
+                                </svg>
+                            </button>
+
                             <!-- AI Toggle -->
                             <button type="button" id="btn-toggle-ai"
                                 class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-[#d1d7db] cursor-pointer select-none"
@@ -137,6 +146,48 @@
                                 <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
                                     <path
                                         d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search Bar (Hidden by default) -->
+                    <div id="search-bar"
+                        class="hidden h-[60px] bg-[#f0f2f5] flex items-center gap-3 px-4 border-b border-[#d1d7db]">
+                        <div class="flex-1 flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                            <svg viewBox="0 0 24 24" width="20" height="20" class="text-[#667781]">
+                                <path fill="currentColor"
+                                    d="M15.009 13.805h-.636l-.22-.219a5.184 5.184 0 0 0 1.256-3.386 5.207 5.207 0 1 0-5.207 5.208 5.183 5.183 0 0 0 3.385-1.255l.221.22v.635l4.004 3.999 1.194-1.195-3.997-4.007zm-4.808 0a3.605 3.605 0 1 1 0-7.21 3.605 3.605 0 0 1 0 7.21z" />
+                            </svg>
+                            <input type="text" id="search-messages-input" placeholder="Search in messages..."
+                                class="flex-1 text-[14px] text-[#3b4a54] outline-none bg-transparent">
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <!-- Results Counter -->
+                            <span id="search-counter"
+                                class="text-[13px] text-[#667781] min-w-[60px] text-center"></span>
+
+                            <!-- Navigation Buttons -->
+                            <button id="btn-search-prev" type="button" title="Previous"
+                                class="w-8 h-8 flex items-center justify-center text-[#54656f] hover:bg-white rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
+                                </svg>
+                            </button>
+                            <button id="btn-search-next" type="button" title="Next"
+                                class="w-8 h-8 flex items-center justify-center text-[#54656f] hover:bg-white rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
+                                </svg>
+                            </button>
+
+                            <!-- Close Button -->
+                            <button id="btn-close-search" type="button" title="Close search"
+                                class="w-8 h-8 flex items-center justify-center text-[#54656f] hover:bg-white rounded-full transition-colors">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                    <path
+                                        d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                                 </svg>
                             </button>
                         </div>

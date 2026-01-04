@@ -525,6 +525,159 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ============ MESSAGE SEARCH ============
+let searchResults = [];
+let currentSearchIndex = -1;
+let searchQuery = '';
+
+function toggleMessageSearch() {
+    const searchBar = document.getElementById('search-bar');
+    const searchInput = document.getElementById('search-messages-input');
+
+    if (searchBar.classList.contains('hidden')) {
+        // Show search bar
+        searchBar.classList.remove('hidden');
+        searchInput.focus();
+        console.log('🔍 Search opened');
+    } else {
+        // Hide and clear
+        searchBar.classList.add('hidden');
+        clearSearchHighlights();
+        searchInput.value = '';
+        searchQuery = '';
+        searchResults = [];
+        currentSearchIndex = -1;
+        updateSearchCounter();
+        console.log('🔍 Search closed');
+    }
+}
+
+function searchMessages(query) {
+    if (!query) {
+        clearSearchHighlights();
+        searchResults = [];
+        currentSearchIndex = -1;
+        updateSearchCounter();
+        return;
+    }
+
+    searchQuery = query.toLowerCase();
+    clearSearchHighlights();
+    searchResults = [];
+
+    // Get all message elements
+    const messageRows = els.messages.querySelectorAll('.msg-row');
+
+    messageRows.forEach((row, index) => {
+        const textDiv = row.querySelector('.whitespace-pre-wrap');
+        if (!textDiv) return;
+
+        const text = textDiv.textContent;
+        const lowerText = text.toLowerCase();
+
+        if (lowerText.includes(searchQuery)) {
+            searchResults.push({ row, textDiv, text, index });
+        }
+    });
+
+    if (searchResults.length > 0) {
+        // Highlight all results
+        searchResults.forEach((result, i) => {
+            highlightText(result.textDiv, result.text, searchQuery);
+        });
+
+        // Set first result as active
+        currentSearchIndex = 0;
+        setActiveSearchResult();
+        console.log(`🔍 Found ${searchResults.length} matches for "${query}"`);
+    } else {
+        console.log(`🔍 No matches for "${query}"`);
+    }
+
+    updateSearchCounter();
+}
+
+function highlightText(element, text, query) {
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    const highlightedHTML = text.replace(regex, '<mark class="search-highlight">$1</mark>');
+    element.innerHTML = highlightedHTML;
+}
+
+function setActiveSearchResult() {
+    if (currentSearchIndex < 0 || currentSearchIndex >= searchResults.length) return;
+
+    // Remove active class from all
+    els.messages.querySelectorAll('.search-highlight').forEach(mark => {
+        mark.classList.remove('search-active');
+    });
+
+    // Add active class to current result
+    const currentResult = searchResults[currentSearchIndex];
+    const marks = currentResult.textDiv.querySelectorAll('.search-highlight');
+    if (marks.length > 0) {
+        marks[0].classList.add('search-active');
+        currentResult.row.classList.add('search-result-active');
+
+        // Scroll to result
+        currentResult.row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    updateSearchCounter();
+}
+
+function navigateSearchResult(direction) {
+    if (searchResults.length === 0) return;
+
+    if (direction === 'next') {
+        currentSearchIndex = (currentSearchIndex + 1) % searchResults.length;
+    } else if (direction === 'prev') {
+        currentSearchIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
+    }
+
+    setActiveSearchResult();
+}
+
+function clearSearchHighlights() {
+    // Remove all highlights
+    const highlights = els.messages.querySelectorAll('.search-highlight, .search-active');
+    highlights.forEach(mark => {
+        const parent = mark.parentNode;
+        parent.textContent = parent.textContent; // Remove HTML tags
+    });
+
+    // Restore original text by re-rendering
+    if (currentJid && conversations[currentJid]) {
+        const conv = conversations[currentJid];
+        if (conv.messages && conv.messages.length > 0) {
+            // Keep the original messages without re-fetching
+            const messageRows = els.messages.querySelectorAll('.msg-row');
+            messageRows.forEach((row) => {
+                row.classList.remove('search-result-active');
+            });
+        }
+    }
+}
+
+function updateSearchCounter() {
+    const counter = document.getElementById('search-counter');
+    const prevBtn = document.getElementById('btn-search-prev');
+    const nextBtn = document.getElementById('btn-search-next');
+
+    if (searchResults.length === 0) {
+        counter.textContent = searchQuery ? 'No results' : '';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+    } else {
+        counter.textContent = `${currentSearchIndex + 1} of ${searchResults.length}`;
+        prevBtn.disabled = false;
+        nextBtn.disabled = false;
+    }
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ============ EXPOSE FUNCTIONS TO WINDOW (for Console Testing) ============
 // Expose key functions to window for debugging
 window.confirmNewChat = confirmNewChat;
@@ -748,6 +901,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         console.log('✅ search-input listeners attached');
+    }
+
+    // ===== MESSAGE SEARCH =====
+    const btnSearchMessages = document.getElementById('btn-search-messages');
+    const searchMessagesInput = document.getElementById('search-messages-input');
+    const btnSearchPrev = document.getElementById('btn-search-prev');
+    const btnSearchNext = document.getElementById('btn-search-next');
+    const btnCloseSearch = document.getElementById('btn-close-search');
+
+    if (btnSearchMessages) {
+        btnSearchMessages.addEventListener('click', (e) => {
+            console.log('🔘 Search messages clicked');
+            e.preventDefault();
+            toggleMessageSearch();
+        });
+        console.log('✅ btn-search-messages listener attached');
+    }
+
+    if (searchMessagesInput) {
+        searchMessagesInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            searchMessages(query);
+        });
+
+        // Escape key to close search
+        searchMessagesInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                toggleMessageSearch();
+            }
+        });
+
+        console.log('✅ search-messages-input listeners attached');
+    }
+
+    if (btnSearchPrev) {
+        btnSearchPrev.addEventListener('click', (e) => {
+            console.log('🔘 Previous search result');
+            e.preventDefault();
+            navigateSearchResult('prev');
+        });
+        console.log('✅ btn-search-prev listener attached');
+    }
+
+    if (btnSearchNext) {
+        btnSearchNext.addEventListener('click', (e) => {
+            console.log('🔘 Next search result');
+            e.preventDefault();
+            navigateSearchResult('next');
+        });
+        console.log('✅ btn-search-next listener attached');
+    }
+
+    if (btnCloseSearch) {
+        btnCloseSearch.addEventListener('click', (e) => {
+            console.log('🔘 Close search');
+            e.preventDefault();
+            toggleMessageSearch();
+        });
+        console.log('✅ btn-close-search listener attached');
     }
 
     console.log('✅✅✅ ALL EVENT LISTENERS ATTACHED SUCCESSFULLY!');

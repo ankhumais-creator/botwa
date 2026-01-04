@@ -129,6 +129,28 @@
     animation: pulse 1.5s infinite;
 }
 
+/* ============ MESSAGE SEARCH ============ */
+/* Search highlight - matches in yellow */
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 2px 0;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+/* Active search result - brighter yellow */
+.search-active {
+    background-color: #ffeb3b;
+    padding: 2px 0;
+    border-radius: 2px;
+    box-shadow: 0 0 0 2px #ffd54f;
+}
+
+/* Scroll to search result smoothly */
+.msg-row.search-result-active {
+    scroll-margin-top: 20px;
+}
+
 /* ============ COLOR VARIABLES ============ */
 /* Light Mode (Default) */
 :root {
