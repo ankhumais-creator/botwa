@@ -2,6 +2,9 @@
  * WhatsApp Web Clone - Main Application Logic
  */
 
+// Import IndexedDB module
+import * as DB from './db.js';
+
 const socket = io();
 
 // ============ STATE ============
@@ -53,6 +56,22 @@ const els = {
 // ============ INITIALIZATION ============
 async function init() {
     try {
+        // 🗄️ Initialize IndexedDB first
+        await DB.initDB();
+        console.log('🗄️ Database ready');
+
+        // 📦 Load conversations from IndexedDB (cache)
+        const cachedConvs = await DB.getAllConversations();
+        cachedConvs.forEach(c => {
+            conversations[c.jid] = c;
+        });
+
+        // Render cached data immediately (instant load!)
+        if (cachedConvs.length > 0) {
+            renderContacts();
+            console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
+        }
+
         // Fetch status & config
         const statusRes = await fetch('/api/status');
         const statusData = await statusRes.json();
@@ -68,13 +87,18 @@ async function init() {
         // Show QR if needed
         if (statusData.qr) showQR(statusData.qr);
 
-        // Fetch existing conversations
+        // 🔄 Fetch fresh conversations from server
         const convRes = await fetch('/api/conversations');
         const convData = await convRes.json();
-        convData.forEach(c => conversations[c.jid] = c);
+
+        // Merge and save to IndexedDB
+        for (const conv of convData) {
+            conversations[conv.jid] = conv;
+            await DB.saveConversation(conv.jid, conv);
+        }
 
         renderContacts();
-        console.log('✅ App initialized');
+        console.log('✅ App initialized with', convData.length, 'conversations');
     } catch (err) {
         console.error('❌ Init error:', err);
     }
@@ -143,14 +167,31 @@ async function selectChat(jid) {
 
     updateAIToggle();
 
-    // Fetch and render messages
+    // 📦 Try to load messages from IndexedDB cache first (instant load!)
+    const cachedConv = await DB.getConversation(jid);
+    if (cachedConv && cachedConv.messages && cachedConv.messages.length > 0) {
+        renderMessages(cachedConv.messages);
+        console.log('📦 Loaded', cachedConv.messages.length, 'messages from cache');
+    }
+
+    // 🔄 Then fetch fresh messages from server
     try {
         const res = await fetch(`/api/conversation/${encodeURIComponent(jid)}`);
         const data = await res.json();
+
+        // Update conversation with fresh messages
+        if (conversations[jid]) {
+            conversations[jid].messages = data.messages || [];
+            await DB.saveConversation(jid, conversations[jid]);
+        }
+
         renderMessages(data.messages || []);
     } catch (err) {
         console.error('Error fetching messages:', err);
-        renderMessages([]);
+        // If server fetch fails, at least we have cached messages
+        if (!cachedConv || !cachedConv.messages) {
+            renderMessages([]);
+        }
     }
 
     renderContacts();
@@ -399,7 +440,7 @@ function closeNewChatModal() {
     els.newChatModal.classList.add('hidden');
 }
 
-function confirmNewChat() {
+async function confirmNewChat() {
     const input = els.newChatInput.value.trim();
     if (!input) return;
 
@@ -416,6 +457,9 @@ function confirmNewChat() {
             lastText: '',
             isPaused: false
         };
+
+        // 💾 Save to IndexedDB
+        await DB.saveConversation(jid, conversations[jid]);
     }
 
     closeNewChatModal();
@@ -431,7 +475,7 @@ function showQR(qr) {
 }
 
 // ============ SOCKET EVENTS ============
-socket.on('conversation_update', data => {
+socket.on('conversation_update', async data => {
     const { jid, conversation } = data;
 
     conversations[jid] = {
@@ -439,8 +483,12 @@ socket.on('conversation_update', data => {
         name: conversation.name,
         lastMessage: conversation.lastMessage,
         lastText: conversation.messages.slice(-1)[0]?.text || '',
-        isPaused: conversation.isPaused
+        isPaused: conversation.isPaused,
+        messages: conversation.messages // Store messages too
     };
+
+    // 💾 Save to IndexedDB
+    await DB.saveConversation(jid, conversations[jid]);
 
     renderContacts();
 
@@ -476,9 +524,12 @@ socket.on('paused_update', data => {
     }
 });
 
-socket.on('contact_updated', data => {
+socket.on('contact_updated', async data => {
     if (conversations[data.jid]) {
         conversations[data.jid].name = data.name;
+
+        // 💾 Update IndexedDB
+        await DB.saveConversation(data.jid, conversations[data.jid]);
     }
 
     renderContacts();
@@ -489,8 +540,12 @@ socket.on('contact_updated', data => {
     }
 });
 
-socket.on('contact_deleted', data => {
+socket.on('contact_deleted', async data => {
     delete conversations[data.jid];
+
+    // 🗑️ Delete from IndexedDB
+    await DB.deleteConversation(data.jid);
+
     renderContacts();
 
     if (data.jid === currentJid) {
