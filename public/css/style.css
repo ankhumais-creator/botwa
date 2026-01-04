@@ -141,7 +141,8 @@ body {
     animation: pulse 1.5s infinite;
 }
 
-/* Color variables for easier theming */
+/* ============ COLOR VARIABLES ============ */
+/* Light Mode (Default) */
 :root {
     --wa-green: #00a884;
     --wa-green-dark: #008f72;
@@ -152,4 +153,60 @@ body {
     --wa-text: #111b21;
     --wa-text-secondary: #667781;
     --wa-border: #d1d7db;
+    --wa-body-bg: #d1d7db;
+    --wa-shadow: rgba(0, 0, 0, 0.15);
+}
+
+/* Dark Mode */
+body.dark-mode {
+    --wa-green: #00a884;
+    --wa-green-dark: #06cf9c;
+    --wa-panel: #202c33;
+    --wa-chat-bg: #0b141a;
+    --wa-bubble-out: #005c4b;
+    --wa-bubble-in: #202c33;
+    --wa-text: #e9edef;
+    --wa-text-secondary: #8696a0;
+    --wa-border: #2a3942;
+    --wa-body-bg: #111b21;
+    --wa-shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* Apply theme colors */
+body {
+    background: var(--wa-body-bg);
+    transition: background-color 0.3s ease;
+}
+
+.chat-pattern {
+    background-color: var(--wa-chat-bg);
+    transition: background-color 0.3s ease;
+}
+
+/* Dark mode chat pattern */
+body.dark-mode .chat-pattern {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23182229' fill-opacity='0.4'%3E%3Cpath d='m36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Context menu dark mode */
+body.dark-mode .context-menu {
+    background: var(--wa-panel);
+    box-shadow: 0 2px 8px var(--wa-shadow);
+}
+
+body.dark-mode .context-menu-item {
+    color: var(--wa-text);
+}
+
+body.dark-mode .context-menu-item:hover {
+    background: var(--wa-border);
+}
+
+/* Contact hover dark mode */
+body.dark-mode .contact-item:hover {
+    background: var(--wa-border);
+}
+
+body.dark-mode .contact-item.active {
+    background: #2a3942;
 }
