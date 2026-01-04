@@ -748,12 +748,12 @@ window.renameContact = renameContact;
 window.deleteContact = deleteContact;
 window.filterContacts = filterContacts;
 
-// ============ START ============
-init();
-
 // ============ EVENT LISTENERS (DEFENSIVE PROGRAMMING) ============
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 DOMContentLoaded fired. Attaching event listeners...');
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 DOMContentLoaded fired. Initializing app...');
+
+    // ⚠️ CRITICAL: Initialize app AFTER DOM is ready
+    await init();
 
     // ===== MODAL BUTTONS =====
     const btnStartChat = document.getElementById('btn-start-chat');
