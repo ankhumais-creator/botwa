@@ -80,7 +80,7 @@ socket.io.on('reconnect_failed', () => {
 async function refreshAfterReconnect() {
     try {
         console.log('🔄 Refreshing data after reconnect...');
-        const res = await fetch('/api/conversations');
+        const res = await fetchWithRetry('/api/conversations');
         if (res.ok) {
             const data = await res.json();
             // Update local state with fresh data
@@ -130,6 +130,50 @@ function updateConnectionIndicator(status) {
                 indicator.style.display = 'none';
             }
         }, 2000);
+    }
+}
+
+// ============ RELIABILITY UTILITIES ============
+const RETRY_CONFIG = {
+    maxRetries: 3,
+    baseDelayMs: 1000,
+    maxDelayMs: 10000
+};
+
+async function fetchWithRetry(url, options = {}, retries = RETRY_CONFIG.maxRetries) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+
+            const response = await fetch(url, {
+                ...options,
+                signal: options.signal || controller.signal
+            });
+            clearTimeout(timeout);
+
+            // Don't retry client errors (4xx), except too many requests (429)
+            if (!response.ok) {
+                if (response.status === 429 || response.status >= 500) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+            }
+
+            return response;
+        } catch (err) {
+            if (attempt === retries) throw err;
+
+            const isTimeout = err.name === 'AbortError';
+            const errorType = isTimeout ? 'Timeout' : 'Error';
+
+            const delay = Math.min(
+                RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000,
+                RETRY_CONFIG.maxDelayMs
+            );
+
+            console.warn(`⚠️ ${errorType} fetching ${url} (Attempt ${attempt + 1}/${retries + 1}). Retrying in ${Math.round(delay)}ms...`, err.message);
+            await new Promise(r => setTimeout(r, delay));
+        }
     }
 }
 
@@ -199,7 +243,7 @@ async function init() {
         }
 
         // Fetch status & config
-        const statusRes = await fetch('/api/status');
+        const statusRes = await fetchWithRetry('/api/status');
         const statusData = await statusRes.json();
 
         pausedChats = new Set(statusData.pausedChats || []);
@@ -217,7 +261,7 @@ async function init() {
         updateConnectionStatus(statusData.status);
 
         // 🔄 Fetch fresh conversations from server
-        const convRes = await fetch('/api/conversations');
+        const convRes = await fetchWithRetry('/api/conversations');
         const convData = await convRes.json();
 
         // Merge and save to IndexedDB
@@ -305,7 +349,7 @@ async function selectChat(jid) {
 
     // 🔄 Then fetch fresh messages from server
     try {
-        const res = await fetch(`/api/conversation/${encodeURIComponent(jid)}`);
+        const res = await fetchWithRetry(`/api/conversation/${encodeURIComponent(jid)}`);
         const data = await res.json();
 
         // Update conversation with fresh messages
@@ -398,7 +442,7 @@ async function sendMessage() {
 
     // Kirim ke server di background
     try {
-        const response = await fetch('/api/send', {
+        const response = await fetchWithRetry('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remoteJid: currentJid, text })
@@ -453,7 +497,7 @@ async function toggleAI() {
     const action = pausedChats.has(currentJid) ? 'resume' : 'pause';
 
     try {
-        await fetch('/api/toggle-bot', {
+        await fetchWithRetry('/api/toggle-bot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remoteJid: currentJid, action })
@@ -503,7 +547,7 @@ async function renameContact() {
     if (!newName) return;
 
     try {
-        await fetch(`/api/contact/${encodeURIComponent(contextMenuJid)}`, {
+        await fetchWithRetry(`/api/contact/${encodeURIComponent(contextMenuJid)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: newName })
@@ -517,7 +561,7 @@ async function deleteContact() {
     if (!confirm('Delete this chat?')) return;
 
     try {
-        await fetch(`/api/contact/${encodeURIComponent(contextMenuJid)}`, {
+        await fetchWithRetry(`/api/contact/${encodeURIComponent(contextMenuJid)}`, {
             method: 'DELETE'
         });
     } catch (err) {
@@ -529,7 +573,7 @@ async function deleteMessage(id) {
     if (!confirm('Delete?')) return;
 
     try {
-        await fetch('/api/message', {
+        await fetchWithRetry('/api/message', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jid: currentJid, messageId: id })
@@ -558,7 +602,7 @@ async function saveSettings() {
     };
 
     try {
-        await fetch('/api/settings', {
+        await fetchWithRetry('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -573,7 +617,7 @@ async function shutdown() {
     if (!confirm('Shutdown system?')) return;
 
     try {
-        await fetch('/api/shutdown', { method: 'POST' });
+        await fetchWithRetry('/api/shutdown', { method: 'POST' });
         els.offlineOverlay.classList.remove('hidden');
     } catch (err) {
         console.error('Shutdown error:', err);
@@ -976,7 +1020,7 @@ async function clearChat() {
 
     try {
         // Call API to clear messages
-        const res = await fetch(`/api/conversation/${encodeURIComponent(currentJid)}/clear`, {
+        const res = await fetchWithRetry(`/api/conversation/${encodeURIComponent(currentJid)}/clear`, {
             method: 'DELETE'
         });
 
