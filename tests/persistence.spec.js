@@ -13,14 +13,14 @@ test.describe('Chat Persistence', () => {
 
         // Wait for database initialization
         await page.waitForFunction(() => {
-            return window.DB !== undefined;
+            return globalThis.DB !== undefined;
         }, { timeout: 5000 });
 
         console.log('✅ Database module loaded');
 
         // Step 2: Clear IndexedDB for clean test
         await page.evaluate(async () => {
-            await window.DB.clearAllData();
+            await globalThis.DB.clearAllData();
         });
 
         console.log('🧹 Cleared IndexedDB');
@@ -52,7 +52,7 @@ test.describe('Chat Persistence', () => {
 
         // Step 5: Verify messages in IndexedDB
         const dbData = await page.evaluate(async () => {
-            const conversations = await window.DB.getAllConversations();
+            const conversations = await globalThis.DB.getAllConversations();
             return conversations;
         });
 
@@ -69,7 +69,7 @@ test.describe('Chat Persistence', () => {
 
         // Wait for app to reinitialize
         await page.waitForFunction(() => {
-            return window.DB !== undefined;
+            return globalThis.DB !== undefined;
         }, { timeout: 5000 });
 
         console.log('🔄 Page reloaded, database reinitialized');
@@ -100,7 +100,7 @@ test.describe('Chat Persistence', () => {
 
         // Step 10: Verify IndexedDB still has data
         const dbDataAfterReload = await page.evaluate(async () => {
-            const conversations = await window.DB.getAllConversations();
+            const conversations = await globalThis.DB.getAllConversations();
             return conversations;
         });
 
@@ -114,9 +114,9 @@ test.describe('Chat Persistence', () => {
         await page.goto('http://localhost:3000');
 
         // Clear all data
-        await page.waitForFunction(() => window.DB !== undefined, { timeout: 5000 });
+        await page.waitForFunction(() => globalThis.DB !== undefined, { timeout: 5000 });
         await page.evaluate(async () => {
-            await window.DB.clearAllData();
+            await globalThis.DB.clearAllData();
         });
 
         await page.reload();

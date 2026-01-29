@@ -717,7 +717,7 @@ async function confirmNewChat() {
 function showQR(qr) {
     els.qrCard.classList.remove('hidden');
     els.qrcode.innerHTML = '';
-    new QRCode(els.qrcode, { text: qr, width: 200, height: 200 });
+    const _qr = new QRCode(els.qrcode, { text: qr, width: 200, height: 200 }); // eslint-disable-line no-unused-vars
 }
 
 // ============ SOCKET EVENTS ============

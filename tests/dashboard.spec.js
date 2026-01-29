@@ -12,11 +12,11 @@ test.describe('WhatsApp Web Clone Dashboard', () => {
         await expect(page).toHaveTitle('WhatsApp Web');
 
         // Check green top bar exists
-        const greenBar = page.locator('.bg-\\[\\#00a884\\]').first();
+        const greenBar = page.locator(String.raw`.bg-\[\#00a884\]`).first();
         await expect(greenBar).toBeVisible();
 
         // Check main container exists
-        const mainContainer = page.locator('.max-w-\\[1600px\\]');
+        const mainContainer = page.locator(String.raw`.max-w-\[1600px\]`);
         await expect(mainContainer).toBeVisible();
     });
 
