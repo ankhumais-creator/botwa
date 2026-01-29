@@ -7,12 +7,12 @@ import * as DB from './db.js';
 
 // ============ GLOBAL ERROR HANDLING ============
 // Prevents uncaught errors from crashing the entire app
-window.addEventListener('error', (event) => {
+globalThis.addEventListener('error', (event) => {
     console.error('🚨 Uncaught error:', event.error?.message || event.message);
     // Log but don't crash - app continues running
 });
 
-window.addEventListener('unhandledrejection', (event) => {
+globalThis.addEventListener('unhandledrejection', (event) => {
     console.error('🚨 Unhandled promise rejection:', event.reason);
     event.preventDefault(); // Prevent browser default handling
 });
@@ -374,7 +374,7 @@ async function selectChat(jid) {
 
     // 📦 Try to load messages from IndexedDB cache first (instant load!)
     const cachedConv = await DB.getConversation(jid);
-    if (cachedConv && cachedConv.messages && cachedConv.messages.length > 0) {
+    if (cachedConv?.messages?.length > 0) {
         renderMessages(cachedConv.messages);
         console.log('📦 Loaded', cachedConv.messages.length, 'messages from cache');
     }
@@ -394,7 +394,7 @@ async function selectChat(jid) {
     } catch (err) {
         console.error('Error fetching messages:', err);
         // If server fetch fails, at least we have cached messages
-        if (!cachedConv || !cachedConv.messages) {
+        if (!cachedConv?.messages) {
             renderMessages([]);
         }
     }
@@ -671,7 +671,7 @@ async function confirmNewChat() {
     const input = els.newChatInput.value.trim();
     if (!input) return;
 
-    let num = input.replace(/\D/g, '');
+    let num = input.replaceAll(/\D/g, '');
     if (num.startsWith('0')) num = '62' + num.slice(1);
 
     const jid = num + '@s.whatsapp.net';
@@ -727,8 +727,9 @@ socket.on('conversation_update', async data => {
     if (jid !== currentJid || !document.hasFocus()) {
         try {
             els.notificationSound.play();
-        } catch (e) {
-            // Audio play may fail due to autoplay policy
+        } catch (audioError) {
+            // Audio play may fail due to autoplay policy - this is expected behavior
+            console.debug('Audio play blocked:', audioError.message);
         }
     }
 });
@@ -962,7 +963,8 @@ function clearSearchHighlights() {
     const highlights = els.messages.querySelectorAll('.search-highlight, .search-active');
     highlights.forEach(mark => {
         const parent = mark.parentNode;
-        parent.textContent = parent.textContent; // Remove HTML tags
+        const textContent = parent.textContent; // Extract text content
+        parent.textContent = textContent; // Remove HTML tags by resetting content
     });
 
     // Restore original text by re-rendering
@@ -995,7 +997,14 @@ function updateSearchCounter() {
 }
 
 function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return string.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
+// Helper function to get message type label (extracted from nested ternary)
+function getMessageTypeLabel(type) {
+    if (type === 'bot') return ' 🤖';
+    if (type === 'manual') return ' 👤';
+    return '';
 }
 
 // ============ CHAT MENU FUNCTIONS ============
@@ -1022,7 +1031,7 @@ function exportChat() {
     messages.forEach(msg => {
         const time = new Date(msg.timestamp).toLocaleString();
         const sender = msg.fromMe ? 'You' : conv.name;
-        const typeLabel = msg.type === 'bot' ? ' 🤖' : (msg.type === 'manual' ? ' 👤' : '');
+        const typeLabel = getMessageTypeLabel(msg.type);
         exportText += `[${time}] ${sender}${typeLabel}:\n${msg.text}\n\n`;
     });
 
@@ -1031,10 +1040,10 @@ function exportChat() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chat-${conv.name.replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.txt`;
+    a.download = `chat-${conv.name.replaceAll(/[^a-z0-9]/gi, '_')}-${Date.now()}.txt`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
     URL.revokeObjectURL(url);
 
     console.log('✅ Chat exported successfully');
@@ -1078,25 +1087,25 @@ async function clearChat() {
     }
 }
 
-// ============ EXPOSE FUNCTIONS TO WINDOW (for Console Testing) ============
-// Expose key functions to window for debugging
-window.confirmNewChat = confirmNewChat;
-window.openNewChat = openNewChat;
-window.closeNewChatModal = closeNewChatModal;
-window.toggleSettings = toggleSettings;
-window.saveSettings = saveSettings;
-window.shutdown = shutdown;
-window.toggleAI = toggleAI;
-window.sendMessage = sendMessage;
-window.handleKey = handleKey;
-window.renameContact = renameContact;
-window.deleteContact = deleteContact;
-window.filterContacts = filterContacts;
+// ============ EXPOSE FUNCTIONS TO GLOBALTHIS (for Console Testing) ============
+// Expose key functions to globalThis for debugging
+globalThis.confirmNewChat = confirmNewChat;
+globalThis.openNewChat = openNewChat;
+globalThis.closeNewChatModal = closeNewChatModal;
+globalThis.toggleSettings = toggleSettings;
+globalThis.saveSettings = saveSettings;
+globalThis.shutdown = shutdown;
+globalThis.toggleAI = toggleAI;
+globalThis.sendMessage = sendMessage;
+globalThis.handleKey = handleKey;
+globalThis.renameContact = renameContact;
+globalThis.deleteContact = deleteContact;
+globalThis.filterContacts = filterContacts;
 // CRITICAL: Required for inline onclick handlers in dynamically rendered HTML
-window.selectChat = selectChat;
-window.showContextMenu = showContextMenu;
-window.showChatMenu = showChatMenu;
-window.deleteMessage = deleteMessage;
+globalThis.selectChat = selectChat;
+globalThis.showContextMenu = showContextMenu;
+globalThis.showChatMenu = showChatMenu;
+globalThis.deleteMessage = deleteMessage;
 
 // ============ EVENT LISTENERS (DEFENSIVE PROGRAMMING) ============
 document.addEventListener('DOMContentLoaded', async () => {

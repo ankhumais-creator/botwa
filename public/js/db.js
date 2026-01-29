@@ -192,8 +192,8 @@ export function clearAllData() {
 /**
  * Export for debugging in console
  */
-if (typeof window !== 'undefined') {
-    window.DB = {
+if (typeof globalThis.window !== 'undefined') {
+    globalThis.DB = {
         initDB,
         saveConversation,
         getConversation,
