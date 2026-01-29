@@ -20,7 +20,118 @@ window.addEventListener('unhandledrejection', (event) => {
 // Log app start time for debugging
 console.log('🚀 App loading at:', new Date().toLocaleTimeString());
 
-const socket = io();
+// ============ SOCKET.IO WITH RECONNECTION ============
+const socket = io({
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.5  // Built-in jitter for exponential backoff
+});
+
+let isSocketConnected = false;
+
+// Connection established
+socket.on('connect', () => {
+    console.log('🔌 Socket connected:', socket.id);
+    isSocketConnected = true;
+    updateConnectionIndicator('connected');
+});
+
+// Disconnected from server
+socket.on('disconnect', (reason) => {
+    console.warn('🔌 Socket disconnected:', reason);
+    isSocketConnected = false;
+
+    if (socket.active) {
+        // Socket.IO will auto-reconnect
+        updateConnectionIndicator('reconnecting');
+    } else {
+        // Manual reconnect needed (server denied or client closed)
+        updateConnectionIndicator('disconnected');
+    }
+});
+
+// Connection error
+socket.on('connect_error', (error) => {
+    console.error('🔌 Socket connection error:', error.message);
+    if (socket.active) {
+        updateConnectionIndicator('reconnecting');
+    } else {
+        updateConnectionIndicator('error');
+    }
+});
+
+// Successfully reconnected (manager event)
+socket.io.on('reconnect', (attempt) => {
+    console.log('🔌 Socket reconnected after', attempt, 'attempts');
+    updateConnectionIndicator('connected');
+    // Refresh data after reconnection
+    refreshAfterReconnect();
+});
+
+// Reconnection failed after all attempts
+socket.io.on('reconnect_failed', () => {
+    console.error('🔌 Socket reconnection failed after all attempts');
+    updateConnectionIndicator('offline');
+});
+
+// Helper function to refresh data after reconnect
+async function refreshAfterReconnect() {
+    try {
+        console.log('🔄 Refreshing data after reconnect...');
+        const res = await fetch('/api/conversations');
+        if (res.ok) {
+            const data = await res.json();
+            // Update local state with fresh data
+            if (data.conversations) {
+                data.conversations.forEach(c => {
+                    if (!conversations[c.jid]) {
+                        conversations[c.jid] = c;
+                    }
+                });
+                renderContacts();
+            }
+        }
+    } catch (err) {
+        console.error('❌ Refresh after reconnect failed:', err);
+    }
+}
+
+// Connection status indicator
+function updateConnectionIndicator(status) {
+    let indicator = document.getElementById('socket-status-indicator');
+
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'socket-status-indicator';
+        indicator.className = 'fixed bottom-4 right-4 px-3 py-1 rounded-full text-xs font-medium shadow-lg z-50 flex items-center gap-2';
+        document.body.appendChild(indicator);
+    }
+
+    const configs = {
+        connected: { bg: 'bg-green-500', text: 'Connected', show: false },
+        reconnecting: { bg: 'bg-yellow-500', text: 'Reconnecting...', show: true },
+        disconnected: { bg: 'bg-red-500', text: 'Disconnected', show: true },
+        offline: { bg: 'bg-gray-500', text: 'Offline Mode', show: true },
+        error: { bg: 'bg-red-600', text: 'Connection Error', show: true }
+    };
+
+    const config = configs[status] || configs.disconnected;
+    indicator.className = `fixed bottom-4 right-4 px-3 py-1 rounded-full text-xs font-medium shadow-lg z-50 flex items-center gap-2 text-white ${config.bg}`;
+    indicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-white ${status === 'reconnecting' ? 'animate-pulse' : ''}"></span>${config.text}`;
+    indicator.style.display = config.show ? 'flex' : 'none';
+
+    // Auto-hide connected status after 2 seconds
+    if (status === 'connected') {
+        indicator.style.display = 'flex';
+        setTimeout(() => {
+            if (isSocketConnected) {
+                indicator.style.display = 'none';
+            }
+        }, 2000);
+    }
+}
 
 // ============ STATE ============
 let conversations = {};
