@@ -4,7 +4,8 @@
     "description": "Lightweight WhatsApp Bot using Baileys and DeepSeek",
     "main": "index.js",
     "scripts": {
-        "start": "node index.js"
+        "start": "node index.js",
+        "dev": "nodemon index.js"
     },
     "dependencies": {
         "@whiskeysockets/baileys": "^7.0.0-rc.9",
@@ -19,6 +20,7 @@
     },
     "devDependencies": {
         "@eslint/js": "^9.39.2",
-        "@playwright/test": "^1.57.0"
+        "@playwright/test": "^1.57.0",
+        "nodemon": "^3.1.11"
     }
 }
