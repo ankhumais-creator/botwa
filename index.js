@@ -12,6 +12,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 require('dotenv').config();
 
+// --- Debug Logger ---
+const DEBUG = true;
+function log(category, message, data = null) {
+    if (!DEBUG) return;
+    const timestamp = new Date().toISOString();
+    const prefix = `[${timestamp}] [${category}]`;
+    if (data) {
+        console.log(prefix, message, JSON.stringify(data, null, 2));
+    } else {
+        console.log(prefix, message);
+    }
+}
+
 // --- Configuration & State ---
 const app = express();
 const server = http.createServer(app);
@@ -31,16 +44,51 @@ app.use((req, res, next) => {
 
 app.use(express.static('public')); // Serve the dashboard
 
+// --- Load Config from file ---
+function loadConfig() {
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        if (fs.existsSync(configPath)) {
+            const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            log('CONFIG', 'Loaded config.json', saved);
+            return saved;
+        }
+    } catch (e) {
+        log('CONFIG', 'Error loading config.json', { error: e.message });
+    }
+    return null;
+}
+
+function saveConfig() {
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        const toSave = {
+            ...currentConfig,
+            pausedChats: Array.from(pausedChats)
+        };
+        fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
+        log('CONFIG', 'Saved config.json');
+    } catch (e) {
+        log('CONFIG', 'Error saving config.json', { error: e.message });
+    }
+}
+
+const savedConfig = loadConfig();
+
 let sock;
 let currentConfig = {
-    apiKey: process.env.API_KEY,
-    baseUrl: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
-    modelName: process.env.MODEL_NAME || 'google/gemma-3n-e4b-it', // Default generic
-    systemPrompt: "You are a helpful and concise WhatsApp assistant. You answer in Indonesian."
+    apiKey: savedConfig?.apiKey || process.env.API_KEY,
+    baseUrl: savedConfig?.baseUrl || process.env.BASE_URL || 'https://openrouter.ai/api/v1',
+    modelName: savedConfig?.modelName || process.env.MODEL_NAME || 'google/gemma-3n-e4b-it',
+    systemPrompt: savedConfig?.systemPrompt || "You are a helpful and concise WhatsApp assistant. You answer in Indonesian."
 };
 let qrCodeData = null;
 let status = 'disconnected';
-const pausedChats = new Set(); // Track chats where AI is disabled
+
+// Load pausedChats from saved config
+const pausedChats = new Set(savedConfig?.pausedChats || []);
+log('INIT', 'Loaded pausedChats', { count: pausedChats.size, chats: Array.from(pausedChats) });
+
 const conversations = {}; // JID -> { jid, name, messages, lastMessage, isPaused }
 
 // Helper to update conversation and notify frontend
@@ -137,21 +185,39 @@ async function connectToWhatsApp() {
             }
 
             try {
-                // Determine if we should reply (Simple Logic for now: Reply all except Status/Groups if needed)
-                // For CS tool, we might want to filter groups. For now, reply all.
-
                 await sock.sendPresenceUpdate('composing', remoteJid);
+
+                // Build conversation history for context
+                const conv = conversations[remoteJid];
+                const historyMessages = [];
+
+                if (conv && conv.messages.length > 0) {
+                    // Get last 5 messages for context
+                    const recentMsgs = conv.messages.slice(-5);
+                    for (const m of recentMsgs) {
+                        historyMessages.push({
+                            role: m.fromMe ? 'assistant' : 'user',
+                            content: m.text
+                        });
+                    }
+                }
+
+                const aiMessages = [
+                    { role: "system", content: currentConfig.systemPrompt },
+                    ...historyMessages,
+                    { role: "user", content: text }
+                ];
+
+                log('AI', 'Sending to AI', { jid: remoteJid, messageCount: aiMessages.length });
 
                 const client = getAIClient();
                 const completion = await client.chat.completions.create({
-                    messages: [
-                        { role: "system", content: currentConfig.systemPrompt },
-                        { role: "user", content: text }
-                    ],
+                    messages: aiMessages,
                     model: currentConfig.modelName,
                 });
 
                 const replyText = completion.choices[0].message.content;
+                log('AI', 'Got response', { jid: remoteJid, reply: replyText.substring(0, 100) });
 
                 // Emit Bot Reply to UI
                 io.emit('msg_log', { direction: 'out', remoteJid, text: replyText });
@@ -160,7 +226,7 @@ async function connectToWhatsApp() {
                 await sock.sendPresenceUpdate('paused', remoteJid);
 
             } catch (error) {
-                console.error('AI Processing Error:', error);
+                log('ERROR', 'AI Processing Error', { error: error.message, stack: error.stack });
                 io.emit('log', `Error: ${error.message}`);
             }
         }
@@ -250,9 +316,14 @@ app.post('/api/toggle-bot', (req, res) => {
 
     if (action === 'pause') {
         pausedChats.add(remoteJid);
+        log('PAUSE', 'AI paused for chat', { jid: remoteJid });
     } else {
         pausedChats.delete(remoteJid);
+        log('PAUSE', 'AI resumed for chat', { jid: remoteJid });
     }
+
+    // Save to config.json for persistence
+    saveConfig();
 
     io.emit('paused_update', { remoteJid, isPaused: pausedChats.has(remoteJid) });
     res.json({ success: true, isPaused: pausedChats.has(remoteJid) });
