@@ -44,8 +44,11 @@ description: Auto-read when starting work on this project
 ## 📋 Quick Commands
 
 ```bash
-# Start Server
+# Start Server (production)
 npm start
+
+# Start Server (development - auto-restart on changes)
+npm run dev
 
 # Test (Playwright E2E)
 npx playwright test

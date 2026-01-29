@@ -135,8 +135,8 @@ async function handleIncomingMessage(msg, getState, setState, io) {
             io.emit('ai_error', { jid: remoteJid, error: result.error });
         }
 
-        // Send reply with random delay (5-8 seconds) for natural feel
-        const delay = 5000 + Math.random() * 3000;
+        // Send reply with random delay (10-13 seconds) for natural feel
+        const delay = 10000 + Math.random() * 3000;
         await new Promise(resolve => setTimeout(resolve, delay));
 
         io.emit('msg_log', { direction: 'out', remoteJid, text: replyText });
