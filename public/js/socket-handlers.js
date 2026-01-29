@@ -46,12 +46,18 @@ socket.io.on('reconnect_failed', () => {
 socket.on('conversation_update', async data => {
     const { jid, conversation } = data;
 
+    console.log('📨 conversation_update received:', {
+        jid,
+        messageCount: conversation.messages?.length || 0,
+        lastMessage: conversation.lastMessage
+    });
+
     state.conversations[jid] = {
         jid,
         name: conversation.name,
         lastMessage: conversation.lastMessage,
         messages: conversation.messages || state.conversations[jid]?.messages || [],
-        lastMessagePreview: conversation.lastMessagePreview,
+        lastMessagePreview: conversation.messages?.slice(-1)[0]?.text || conversation.lastMessagePreview,
         isPaused: state.pausedChats.has(jid)
     };
 
@@ -59,6 +65,7 @@ socket.on('conversation_update', async data => {
     renderContacts();
 
     if (jid === state.currentJid) {
+        console.log('📱 Rendering messages for current chat:', state.conversations[jid].messages?.length);
         renderMessages(state.conversations[jid].messages);
     }
 });

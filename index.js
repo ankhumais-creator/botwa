@@ -54,6 +54,62 @@ log('INIT', 'Loaded pausedChats', { count: state.pausedChats.size });
 const getState = () => state;
 const setState = (updates) => Object.assign(state, updates);
 
+// --- Health Check & Debug Endpoints ---
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        whatsapp: state.status,
+        conversationCount: Object.keys(state.conversations).length,
+        pausedChatsCount: state.pausedChats.size,
+        uptime: process.uptime()
+    });
+});
+
+app.get('/api/debug/conversations', (req, res) => {
+    res.json({
+        count: Object.keys(state.conversations).length,
+        conversations: Object.entries(state.conversations).map(([jid, conv]) => ({
+            jid,
+            name: conv.name,
+            messageCount: conv.messages?.length || 0,
+            lastMessage: conv.lastMessage
+        }))
+    });
+});
+
+// Test endpoint to simulate message (dev only)
+app.post('/api/debug/simulate-message', (req, res) => {
+    const { jid = 'test@s.whatsapp.net', text = 'Test message' } = req.body;
+
+    // Simulate incoming message
+    if (!state.conversations[jid]) {
+        state.conversations[jid] = {
+            jid,
+            name: jid.replace('@s.whatsapp.net', ''),
+            messages: [],
+            lastMessage: Date.now(),
+            isPaused: false
+        };
+    }
+
+    const msgObj = {
+        id: Date.now().toString(),
+        text,
+        fromMe: false,
+        timestamp: Date.now()
+    };
+
+    state.conversations[jid].messages.push(msgObj);
+    state.conversations[jid].lastMessage = Date.now();
+
+    // Emit to frontend
+    io.emit('conversation_update', { jid, conversation: state.conversations[jid] });
+
+    log('DEBUG', 'Simulated message', { jid, text, messageCount: state.conversations[jid].messages.length });
+
+    res.json({ success: true, conversation: state.conversations[jid] });
+});
+
 // --- Setup Routes ---
 setupRoutes(app, getState, io);
 
