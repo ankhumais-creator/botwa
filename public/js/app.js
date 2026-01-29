@@ -184,96 +184,128 @@ let pausedChats = new Set();
 let contextMenuJid = null;
 
 // ============ DOM ELEMENTS ============
-const $ = id => document.getElementById(id);
+// Safe DOM element getter with lazy initialization
+const getEl = (id) => {
+    const el = document.getElementById(id);
+    if (!el) console.warn(`⚠️ Element #${id} not found`);
+    return el;
+};
+
+const $ = getEl;
 
 const els = {
     // Sidebar
-    contactList: $('contact-list'),
-    emptyContacts: $('empty-contacts'),
-    searchInput: $('search-input'),
+    get contactList() { return getEl('contact-list'); },
+    get emptyContacts() { return getEl('empty-contacts'); },
+    get searchInput() { return getEl('search-input'); },
 
     // Chat Area
-    welcomeScreen: $('welcome-screen'),
-    chatContainer: $('chat-container'),
-    messages: $('messages'),
-    messageInput: $('message-input'),
+    get welcomeScreen() { return getEl('welcome-screen'); },
+    get chatContainer() { return getEl('chat-container'); },
+    get messages() { return getEl('messages'); },
+    get messageInput() { return getEl('message-input'); },
 
     // Chat Header
-    chatName: $('chat-name'),
-    chatAvatar: $('chat-avatar'),
-    chatStatus: $('chat-status'),
+    get chatName() { return getEl('chat-name'); },
+    get chatAvatar() { return getEl('chat-avatar'); },
+    get chatStatus() { return getEl('chat-status'); },
 
     // New Chat Modal
-    newChatModal: $('new-chat-modal'),
-    newChatInput: $('new-chat-input'),
+    get newChatModal() { return getEl('new-chat-modal'); },
+    get newChatInput() { return getEl('new-chat-input'); },
 
     // AI Toggle
-    aiLabel: $('ai-label'),
-    aiToggle: $('ai-toggle'),
-    aiDot: $('ai-dot'),
+    get aiLabel() { return getEl('ai-label'); },
+    get aiToggle() { return getEl('ai-toggle'); },
+    get aiDot() { return getEl('ai-dot'); },
 
     // Panels & Overlays
-    settingsPanel: $('settings-panel'),
-    qrCard: $('qr-card'),
-    qrcode: $('qrcode'),
-    contextMenu: $('context-menu'),
-    offlineOverlay: $('offline-overlay'),
+    get settingsPanel() { return getEl('settings-panel'); },
+    get qrCard() { return getEl('qr-card'); },
+    get qrcode() { return getEl('qrcode'); },
+    get contextMenu() { return getEl('context-menu'); },
+    get offlineOverlay() { return getEl('offline-overlay'); },
 
     // Audio
-    notificationSound: $('notification-sound')
+    get notificationSound() { return getEl('notification-sound'); }
 };
 
 // ============ INITIALIZATION ============
 async function init() {
-    try {
-        // 🗄️ Initialize IndexedDB first
-        await DB.initDB();
-        console.log('🗄️ Database ready');
+    let attempts = 0;
+    const maxAttempts = 3;
 
-        // 📦 Load conversations from IndexedDB (cache)
-        const cachedConvs = await DB.getAllConversations();
-        cachedConvs.forEach(c => {
-            conversations[c.jid] = c;
-        });
+    while (attempts < maxAttempts) {
+        try {
+            console.log(`🚀 Initialization attempt ${attempts + 1}/${maxAttempts}`);
 
-        // Render cached data immediately (instant load!)
-        if (cachedConvs.length > 0) {
+            // 🗄️ Initialize IndexedDB first
+            await DB.initDB();
+            console.log('🗄️ Database ready');
+
+            // 📦 Load conversations from IndexedDB (cache)
+            const cachedConvs = await DB.getAllConversations();
+            cachedConvs.forEach(c => {
+                conversations[c.jid] = c;
+            });
+
+            // Render cached data immediately (instant load!)
+            if (cachedConvs.length > 0) {
+                renderContacts();
+                console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
+            }
+
+            // Fetch status & config
+            const statusRes = await fetchWithRetry('/api/status');
+            const statusData = await statusRes.json();
+
+            pausedChats = new Set(statusData.pausedChats || []);
+
+            // Populate settings form
+            if ($('inp-url')) $('inp-url').value = statusData.config.baseUrl || '';
+            if ($('inp-key')) $('inp-key').value = statusData.config.apiKey || '';
+            if ($('inp-model')) $('inp-model').value = statusData.config.modelName || '';
+            if ($('inp-prompt')) $('inp-prompt').value = statusData.config.systemPrompt || '';
+
+            // Show QR if needed
+            if (statusData.qr) showQR(statusData.qr);
+
+            // Update connection status indicator
+            updateConnectionStatus(statusData.status);
+
+            // 🔄 Fetch fresh conversations from server
+            const convRes = await fetchWithRetry('/api/conversations');
+            const convData = await convRes.json();
+
+            // Merge and save to IndexedDB
+            for (const conv of convData) {
+                conversations[conv.jid] = conv;
+                await DB.saveConversation(conv.jid, conv);
+            }
+
             renderContacts();
-            console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
+            console.log('✅ App initialized with', convData.length, 'conversations');
+
+            // Success - break loop
+            return;
+
+        } catch (err) {
+            attempts++;
+            console.error(`❌ Init attempt ${attempts} failed:`, err);
+
+            if (attempts >= maxAttempts) {
+                console.error('🚨 All initialization attempts failed. Entering offline mode.');
+                updateConnectionIndicator('offline');
+                // Ensure contacts are at least rendered from cache
+                if (Object.keys(conversations).length > 0) {
+                    renderContacts();
+                }
+                return;
+            }
+
+            // Wait before retrying (2s)
+            await new Promise(r => setTimeout(r, 2000));
         }
-
-        // Fetch status & config
-        const statusRes = await fetchWithRetry('/api/status');
-        const statusData = await statusRes.json();
-
-        pausedChats = new Set(statusData.pausedChats || []);
-
-        // Populate settings form
-        $('inp-url').value = statusData.config.baseUrl || '';
-        $('inp-key').value = statusData.config.apiKey || '';
-        $('inp-model').value = statusData.config.modelName || '';
-        $('inp-prompt').value = statusData.config.systemPrompt || '';
-
-        // Show QR if needed
-        if (statusData.qr) showQR(statusData.qr);
-
-        // Update connection status indicator
-        updateConnectionStatus(statusData.status);
-
-        // 🔄 Fetch fresh conversations from server
-        const convRes = await fetchWithRetry('/api/conversations');
-        const convData = await convRes.json();
-
-        // Merge and save to IndexedDB
-        for (const conv of convData) {
-            conversations[conv.jid] = conv;
-            await DB.saveConversation(conv.jid, conv);
-        }
-
-        renderContacts();
-        console.log('✅ App initialized with', convData.length, 'conversations');
-    } catch (err) {
-        console.error('❌ Init error:', err);
     }
 }
 
