@@ -1,30 +1,20 @@
 /**
  * Shared Application State
  * Central source of truth for all modules
+ * Uses object with getters/setters to avoid mutable export warnings
  */
 
-// ============ STATE ============
-// Note: Mutable let exports are intentional for this module - it provides shared
-// mutable state that other modules can read directly and mutate via setter functions.
-
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let conversations = {};
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let currentJid = null;
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let pausedChats = new Set();
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let contextMenuJid = null;
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let isSocketConnected = false;
-
-// ============ SEARCH STATE ============
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let searchResults = [];
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let currentSearchIndex = -1;
-// biome-ignore lint/style/useConst: Intentional mutable state exports
-export let searchQuery = '';
+// ============ INTERNAL STATE ============
+const _state = {
+    conversations: {},
+    currentJid: null,
+    pausedChats: new Set(),
+    contextMenuJid: null,
+    isSocketConnected: false,
+    searchResults: [],
+    currentSearchIndex: -1,
+    searchQuery: ''
+};
 
 // ============ CONFIG ============
 export const RETRY_CONFIG = {
@@ -33,45 +23,33 @@ export const RETRY_CONFIG = {
     maxDelayMs: 10000
 };
 
-// ============ STATE MUTATORS ============
-// These functions allow other modules to update state
+// ============ STATE OBJECT ============
+// Export a single const object with getters for direct property-style access
+// and methods for mutations
+const state = {
+    // Getters for read access (allows state.conversations, state.currentJid, etc.)
+    get conversations() { return _state.conversations; },
+    get currentJid() { return _state.currentJid; },
+    get pausedChats() { return _state.pausedChats; },
+    get contextMenuJid() { return _state.contextMenuJid; },
+    get isSocketConnected() { return _state.isSocketConnected; },
+    get searchResults() { return _state.searchResults; },
+    get currentSearchIndex() { return _state.currentSearchIndex; },
+    get searchQuery() { return _state.searchQuery; },
 
-export function setConversations(convs) {
-    conversations = convs;
-}
+    // Setters
+    setConversations(convs) { _state.conversations = convs; },
+    setCurrentJid(jid) { _state.currentJid = jid; },
+    setPausedChats(chats) { _state.pausedChats = chats; },
+    setContextMenuJid(jid) { _state.contextMenuJid = jid; },
+    setSocketConnected(connected) { _state.isSocketConnected = connected; },
+    setSearchResults(results) { _state.searchResults = results; },
+    setCurrentSearchIndex(index) { _state.currentSearchIndex = index; },
+    setSearchQuery(query) { _state.searchQuery = query; },
 
-export function setCurrentJid(jid) {
-    currentJid = jid;
-}
+    // Helpers
+    updateConversation(jid, data) { _state.conversations[jid] = data; },
+    deleteConversation(jid) { delete _state.conversations[jid]; }
+};
 
-export function setPausedChats(chats) {
-    pausedChats = chats;
-}
-
-export function setContextMenuJid(jid) {
-    contextMenuJid = jid;
-}
-
-export function setSocketConnected(connected) {
-    isSocketConnected = connected;
-}
-
-export function setSearchResults(results) {
-    searchResults = results;
-}
-
-export function setCurrentSearchIndex(index) {
-    currentSearchIndex = index;
-}
-
-export function setSearchQuery(query) {
-    searchQuery = query;
-}
-
-export function updateConversation(jid, data) {
-    conversations[jid] = data;
-}
-
-export function deleteConversation(jid) {
-    delete conversations[jid];
-}
+export default state;

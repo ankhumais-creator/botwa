@@ -4,9 +4,9 @@
  */
 
 import * as DB from './db.js';
-import * as state from './state.js';
+import state from './state.js';
 import { els, $ } from './dom.js';
-import { renderContacts, renderMessages, updateAIToggle, selectChat } from './chat.js';
+import { renderContacts, renderMessages, selectChat } from './chat.js';
 
 // ============ SETTINGS ============
 export function toggleSettings() {
@@ -72,7 +72,7 @@ export async function confirmNewChat() {
     }
 
     // Clean phone number
-    phone = phone.replace(/\D/g, '');
+    phone = phone.replaceAll(/\D/g, '');
     if (!phone.startsWith('62')) {
         phone = '62' + phone.replace(/^0+/, '');
     }
@@ -110,7 +110,7 @@ export async function renameContact() {
     const conv = state.conversations[jid];
     const newName = prompt('Enter new name:', conv?.name || '');
 
-    if (newName && newName.trim()) {
+    if (newName?.trim()) {
         state.conversations[jid].name = newName.trim();
         await DB.saveConversation(jid, state.conversations[jid]);
         renderContacts();

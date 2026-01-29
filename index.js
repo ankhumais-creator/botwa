@@ -14,6 +14,7 @@ const { loadConfig, initConfig } = require('./src/config');
 const { setupRoutes } = require('./src/routes');
 const { connectToWhatsApp } = require('./src/whatsapp');
 const { apiLimiter } = require('./src/middleware/rate-limit');
+const { loadConversations, saveConversations, forceSaveConversations } = require('./src/conversations');
 
 // --- Initialize Express ---
 const app = express();
@@ -45,10 +46,11 @@ const state = {
     qrCodeData: null,
     status: 'disconnected',
     pausedChats: new Set(savedConfig?.pausedChats || []),
-    conversations: {}
+    conversations: loadConversations()
 };
 
 log('INIT', 'Loaded pausedChats', { count: state.pausedChats.size });
+log('INIT', 'Loaded conversations', { count: Object.keys(state.conversations).length });
 
 // State accessors for modules
 const getState = () => state;

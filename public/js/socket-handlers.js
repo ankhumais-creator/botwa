@@ -4,7 +4,7 @@
  */
 
 import * as DB from './db.js';
-import * as state from './state.js';
+import state from './state.js';
 import { els } from './dom.js';
 import { renderContacts, renderMessages, updateAIToggle } from './chat.js';
 import { showQR, updateConnectionStatus } from './ui-handlers.js';

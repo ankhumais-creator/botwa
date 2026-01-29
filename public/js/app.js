@@ -5,7 +5,7 @@
 
 // ============ MODULE IMPORTS ============
 import * as DB from './db.js';
-import * as state from './state.js';
+import state, { RETRY_CONFIG } from './state.js';
 import { els, $ } from './dom.js';
 import { renderContacts } from './chat.js';
 import { showQR, updateConnectionStatus } from './ui-handlers.js';
@@ -24,7 +24,7 @@ globalThis.addEventListener('unhandledrejection', (event) => {
 });
 
 // ============ RETRY UTILITY ============
-async function fetchWithRetry(url, options = {}, retries = state.RETRY_CONFIG.maxRetries) {
+async function fetchWithRetry(url, options = {}, retries = RETRY_CONFIG.maxRetries) {
     for (let i = 0; i <= retries; i++) {
         try {
             const res = await fetch(url, options);
@@ -33,8 +33,8 @@ async function fetchWithRetry(url, options = {}, retries = state.RETRY_CONFIG.ma
         } catch (err) {
             if (i === retries) throw err;
             const delay = Math.min(
-                state.RETRY_CONFIG.baseDelayMs * Math.pow(2, i),
-                state.RETRY_CONFIG.maxDelayMs
+                RETRY_CONFIG.baseDelayMs * Math.pow(2, i),
+                RETRY_CONFIG.maxDelayMs
             );
             console.warn(`⚠️ Retry ${i + 1}/${retries} for ${url} in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));

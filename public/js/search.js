@@ -4,7 +4,7 @@
  */
 
 import { els, escapeRegex } from './dom.js';
-import * as state from './state.js';
+import state from './state.js';
 
 // ============ TOGGLE SEARCH ============
 export function toggleMessageSearch() {
