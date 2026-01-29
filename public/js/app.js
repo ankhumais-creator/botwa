@@ -5,6 +5,21 @@
 // Import IndexedDB module
 import * as DB from './db.js';
 
+// ============ GLOBAL ERROR HANDLING ============
+// Prevents uncaught errors from crashing the entire app
+window.addEventListener('error', (event) => {
+    console.error('🚨 Uncaught error:', event.error?.message || event.message);
+    // Log but don't crash - app continues running
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('🚨 Unhandled promise rejection:', event.reason);
+    event.preventDefault(); // Prevent browser default handling
+});
+
+// Log app start time for debugging
+console.log('🚀 App loading at:', new Date().toLocaleTimeString());
+
 const socket = io();
 
 // ============ STATE ============
@@ -86,6 +101,9 @@ async function init() {
 
         // Show QR if needed
         if (statusData.qr) showQR(statusData.qr);
+
+        // Update connection status indicator
+        updateConnectionStatus(statusData.status);
 
         // 🔄 Fetch fresh conversations from server
         const convRes = await fetch('/api/conversations');
@@ -345,7 +363,29 @@ function showContextMenu(e, jid) {
 
 document.addEventListener('click', () => {
     els.contextMenu.classList.add('hidden');
+    // Also hide chat menu
+    const chatMenu = document.getElementById('chat-menu');
+    if (chatMenu) chatMenu.classList.add('hidden');
 });
+
+// ============ CHAT MENU (3 dots in header) ============
+function showChatMenu(e) {
+    const chatMenu = document.getElementById('chat-menu');
+    if (!chatMenu) {
+        console.error('❌ chat-menu element not found!');
+        return;
+    }
+
+    // Position the menu below the button
+    const button = e.currentTarget || e.target;
+    const rect = button.getBoundingClientRect();
+
+    chatMenu.classList.remove('hidden');
+    chatMenu.style.top = (rect.bottom + 5) + 'px';
+    chatMenu.style.left = (rect.right - chatMenu.offsetWidth) + 'px';
+
+    console.log('📍 Chat menu shown at:', rect.bottom, rect.right);
+}
 
 async function renameContact() {
     const newName = prompt('New name:', conversations[contextMenuJid]?.name || '');
@@ -563,6 +603,44 @@ socket.on('qr', qr => {
     }
 });
 
+// Handle connection status updates
+socket.on('status', status => {
+    console.log('📡 Connection status:', status);
+    updateConnectionStatus(status);
+});
+
+function updateConnectionStatus(status) {
+    // Get or create status indicator - fixed at bottom-left corner
+    let indicator = document.getElementById('connection-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'connection-indicator';
+        indicator.className = 'fixed bottom-4 left-4 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full shadow-lg z-50';
+        document.body.appendChild(indicator);
+    }
+
+    if (indicator) {
+        switch (status) {
+            case 'connected':
+                indicator.innerHTML = '<span class="w-2 h-2 bg-green-500 rounded-full"></span><span class="text-green-700 font-medium">Connected</span>';
+                indicator.className = 'fixed bottom-4 left-4 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full shadow-lg z-50 bg-green-100 border border-green-200';
+                els.qrCard?.classList.add('hidden');
+                break;
+            case 'waiting_for_scan':
+                indicator.innerHTML = '<span class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span><span class="text-yellow-700 font-medium">Scan QR</span>';
+                indicator.className = 'fixed bottom-4 left-4 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full shadow-lg z-50 bg-yellow-100 border border-yellow-200';
+                break;
+            case 'disconnected':
+                indicator.innerHTML = '<span class="w-2 h-2 bg-red-500 rounded-full"></span><span class="text-red-700 font-medium">Offline</span>';
+                indicator.className = 'fixed bottom-4 left-4 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full shadow-lg z-50 bg-red-100 border border-red-200';
+                break;
+            default:
+                indicator.innerHTML = '<span class="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span><span class="text-gray-600 font-medium">Connecting...</span>';
+                indicator.className = 'fixed bottom-4 left-4 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full shadow-lg z-50 bg-gray-100 border border-gray-200';
+        }
+    }
+}
+
 // ============ UTILITIES ============
 function formatTime(timestamp) {
     const date = new Date(timestamp);
@@ -733,6 +811,86 @@ function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// ============ CHAT MENU FUNCTIONS ============
+function exportChat() {
+    if (!currentJid || !conversations[currentJid]) {
+        console.log('❌ No chat selected to export');
+        return;
+    }
+
+    const conv = conversations[currentJid];
+    const messages = conv.messages || [];
+
+    if (messages.length === 0) {
+        alert('No messages to export');
+        return;
+    }
+
+    // Format messages for export
+    let exportText = `Chat Export: ${conv.name}\n`;
+    exportText += `Exported: ${new Date().toLocaleString()}\n`;
+    exportText += `Total Messages: ${messages.length}\n`;
+    exportText += '='.repeat(50) + '\n\n';
+
+    messages.forEach(msg => {
+        const time = new Date(msg.timestamp).toLocaleString();
+        const sender = msg.fromMe ? 'You' : conv.name;
+        const typeLabel = msg.type === 'bot' ? ' 🤖' : (msg.type === 'manual' ? ' 👤' : '');
+        exportText += `[${time}] ${sender}${typeLabel}:\n${msg.text}\n\n`;
+    });
+
+    // Create and download file
+    const blob = new Blob([exportText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-${conv.name.replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('✅ Chat exported successfully');
+}
+
+async function clearChat() {
+    if (!currentJid) {
+        console.log('❌ No chat selected to clear');
+        return;
+    }
+
+    if (!confirm('Clear all messages in this chat? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        // Call API to clear messages
+        const res = await fetch(`/api/conversation/${encodeURIComponent(currentJid)}/clear`, {
+            method: 'DELETE'
+        });
+
+        if (!res.ok) {
+            throw new Error('Failed to clear chat');
+        }
+
+        // Update local state
+        if (conversations[currentJid]) {
+            conversations[currentJid].messages = [];
+            conversations[currentJid].lastText = '';
+            await DB.saveConversation(currentJid, conversations[currentJid]);
+        }
+
+        // Clear UI
+        renderMessages([]);
+        renderContacts();
+
+        console.log('✅ Chat cleared successfully');
+    } catch (err) {
+        console.error('❌ Clear chat error:', err);
+        alert('Failed to clear chat. Please try again.');
+    }
+}
+
 // ============ EXPOSE FUNCTIONS TO WINDOW (for Console Testing) ============
 // Expose key functions to window for debugging
 window.confirmNewChat = confirmNewChat;
@@ -747,6 +905,11 @@ window.handleKey = handleKey;
 window.renameContact = renameContact;
 window.deleteContact = deleteContact;
 window.filterContacts = filterContacts;
+// CRITICAL: Required for inline onclick handlers in dynamically rendered HTML
+window.selectChat = selectChat;
+window.showContextMenu = showContextMenu;
+window.showChatMenu = showChatMenu;
+window.deleteMessage = deleteMessage;
 
 // ============ EVENT LISTENERS (DEFENSIVE PROGRAMMING) ============
 document.addEventListener('DOMContentLoaded', async () => {
@@ -850,6 +1013,50 @@ document.addEventListener('DOMContentLoaded', async () => {
             toggleAI();
         });
         console.log('✅ btn-toggle-ai listener attached');
+    }
+
+    // Chat header menu button (3 dots)
+    const btnChatMenu = document.getElementById('btn-chat-menu');
+    if (btnChatMenu) {
+        btnChatMenu.addEventListener('click', (e) => {
+            console.log('🔘 Chat Menu clicked');
+            e.preventDefault();
+            e.stopPropagation();
+            showChatMenu(e);
+        });
+        console.log('✅ btn-chat-menu listener attached');
+    }
+
+    // Chat menu items
+    const btnMenuToggleAI = document.getElementById('btn-menu-toggle-ai');
+    const btnMenuExportChat = document.getElementById('btn-menu-export-chat');
+    const btnMenuClearChat = document.getElementById('btn-menu-clear-chat');
+
+    if (btnMenuToggleAI) {
+        btnMenuToggleAI.addEventListener('click', () => {
+            console.log('🔘 Menu: Toggle AI clicked');
+            toggleAI();
+            document.getElementById('chat-menu')?.classList.add('hidden');
+        });
+        console.log('✅ btn-menu-toggle-ai listener attached');
+    }
+
+    if (btnMenuExportChat) {
+        btnMenuExportChat.addEventListener('click', () => {
+            console.log('🔘 Menu: Export Chat clicked');
+            exportChat();
+            document.getElementById('chat-menu')?.classList.add('hidden');
+        });
+        console.log('✅ btn-menu-export-chat listener attached');
+    }
+
+    if (btnMenuClearChat) {
+        btnMenuClearChat.addEventListener('click', () => {
+            console.log('🔘 Menu: Clear Chat clicked');
+            clearChat();
+            document.getElementById('chat-menu')?.classList.add('hidden');
+        });
+        console.log('✅ btn-menu-clear-chat listener attached');
     }
 
     if (btnSendMessage) {

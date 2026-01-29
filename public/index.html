@@ -142,7 +142,8 @@
                                     </div>
                                 </div>
                             </button>
-                            <button class="text-[#54656f] hover:text-[#00a884] transition-colors">
+                            <button id="btn-chat-menu" type="button" title="Menu"
+                                class="text-[#54656f] hover:text-[#00a884] transition-colors">
                                 <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
                                     <path
                                         d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z" />
@@ -281,6 +282,13 @@
             <div id="context-menu" class="context-menu hidden">
                 <button type="button" id="btn-rename-contact" class="context-menu-item">Rename contact</button>
                 <button type="button" id="btn-delete-contact" class="context-menu-item danger">Delete chat</button>
+            </div>
+
+            <!-- ========== CHAT MENU (3 dots) ========== -->
+            <div id="chat-menu" class="context-menu hidden">
+                <button type="button" id="btn-menu-toggle-ai" class="context-menu-item">🤖 Toggle AI</button>
+                <button type="button" id="btn-menu-export-chat" class="context-menu-item">📥 Export Chat</button>
+                <button type="button" id="btn-menu-clear-chat" class="context-menu-item danger">🗑️ Clear Chat</button>
             </div>
 
             <!-- ========== NEW CHAT MODAL ========== -->
