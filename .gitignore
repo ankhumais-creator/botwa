@@ -3,3 +3,7 @@ node_modules/
 auth_info_baileys/
 config.json
 .DS_Store
+
+# Test artifacts
+playwright-report/
+test-results/
