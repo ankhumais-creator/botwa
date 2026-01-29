@@ -135,7 +135,10 @@ async function handleIncomingMessage(msg, getState, setState, io) {
             io.emit('ai_error', { jid: remoteJid, error: result.error });
         }
 
-        // Send reply
+        // Send reply with random delay (2-5 seconds) for natural feel
+        const delay = 2000 + Math.random() * 3000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+
         io.emit('msg_log', { direction: 'out', remoteJid, text: replyText });
         await state.sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
         await state.sock.sendPresenceUpdate('paused', remoteJid);
