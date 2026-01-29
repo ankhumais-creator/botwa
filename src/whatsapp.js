@@ -25,7 +25,6 @@ async function connectToWhatsApp(getState, setState, io) {
     // Connection events
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
-        const state = getState();
 
         if (qr) {
             setState({ qrCodeData: qr, status: 'waiting_for_scan' });

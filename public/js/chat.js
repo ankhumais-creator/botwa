@@ -153,7 +153,7 @@ export async function sendMessage() {
         const res = await fetch('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jid: state.currentJid, message: text })
+            body: JSON.stringify({ remoteJid: state.currentJid, text })
         });
 
         if (!res.ok) throw new Error('Failed to send');

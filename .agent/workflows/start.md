@@ -63,12 +63,17 @@ npx eslint .
 ---
 
 ## 📊 Current Status (Last Updated: 2026-01-29)
-- **Backend**: Node.js + Express + Socket.IO
-- **WhatsApp**: Baileys (WhiskeySockets)
-- **AI**: OpenRouter API (DeepSeek/Gemma models)
-- **Frontend**: Vanilla JS + TailwindCSS
-- **Tests**: Playwright E2E (2 spec files)
-- **Port**: 3000
+
+| Component | Technology |
+|-----------|------------|
+| Backend | Node.js + Express + Socket.IO |
+| WhatsApp | Baileys (@whiskeysockets/baileys v7) |
+| AI | OpenRouter API (OpenAI SDK) |
+| Frontend | Vanilla JS + TailwindCSS (CDN) |
+| State | Getter-based object pattern (no mutable exports) |
+| Persistence | IndexedDB (frontend) + JSON file (backend) |
+| Tests | Playwright E2E |
+| Port | 3000 |
 
 ---
 
@@ -76,164 +81,59 @@ npx eslint .
 
 ```
 efficient-wa-bot/
-├── index.js              # Main server (Express + Baileys + Socket.IO)
-├── config.json           # Persisted settings (API key, model, prompt)
-├── public/
+├── index.js              # Main server entry point
+├── config.json           # Persisted settings (API key, model, prompt, pausedChats)
+├── .env                  # Environment variables (API_KEY, BASE_URL)
+│
+├── src/                  # Backend modules
+│   ├── ai.js             # OpenRouter AI client (generateResponse)
+│   ├── config.js         # Config load/save/init
+│   ├── conversations.js  # Conversation persistence (JSON file)
+│   ├── logger.js         # Structured logging utility
+│   ├── routes.js         # All API endpoints
+│   ├── whatsapp.js       # Baileys connection & message handling
+│   └── middleware/
+│       └── rate-limit.js # Express rate limiter
+│
+├── public/               # Frontend
 │   ├── index.html        # Dashboard UI
 │   ├── css/style.css     # Custom styles
-│   └── js/
-│       ├── app.js        # Entry point, global handlers
-│       ├── state.js      # Shared application state
+│   └── js/               # 9 ES6 modules
+│       ├── app.js        # Entry point, global handlers, init
+│       ├── state.js      # Shared state (getter object pattern)
 │       ├── dom.js        # DOM utilities & element getters
 │       ├── db.js         # IndexedDB persistence
 │       ├── chat.js       # Chat & message rendering
-│       ├── search.js     # In-chat message search
+│       ├── search.js     # In-chat message search with highlighting
 │       ├── socket-handlers.js  # Socket.IO event handlers
-│       ├── ui-handlers.js      # UI event handlers (modals, context menu)
+│       ├── ui-handlers.js      # Settings, modals, context menu
 │       └── events.js     # Event binding & keyboard shortcuts
-├── tests/
-│   ├── dashboard.spec.js   # Dashboard functionality tests
-│   └── persistence.spec.js # Settings persistence tests
-└── auth_info_baileys/    # WhatsApp session data (gitignored)
+│
+├── tests/                # Playwright E2E tests
+│   ├── dashboard.spec.js
+│   └── persistence.spec.js
+│
+└── auth_info_baileys/    # WhatsApp session (gitignored)
 ```
 
 ---
 
-# 🔗 DEPENDENCY CHAINS
+# 🔌 API ENDPOINTS (src/routes.js)
 
-## Backend Changes
-
-### Main Server (index.js)
-```
-IF changing: index.js
-THEN check:
-  → API endpoints (/api/*)
-  → Socket.IO events (io.emit)
-  → WhatsApp connection logic (makeWASocket)
-  → AI response handler (getAIClient)
-  → FRONTEND: socket-handlers.js
-```
-
-### Config Persistence
-```
-IF changing: loadConfig() or saveConfig()
-THEN check:
-  → config.json structure
-  → FRONTEND: Settings panel submission
-  → All places reading currentConfig
-```
-
----
-
-## Frontend Changes
-
-### Modular JS Structure
-```
-IF changing: public/js/state.js
-THEN check:
-  → All modules import * as state
-  → Setter functions (setConversations, setCurrentJid, etc)
-  → Socket handlers updating state
-
-IF changing: public/js/dom.js
-THEN check:
-  → Element IDs must match index.html
-  → Other modules importing { els, $, formatTime, escapeHtml }
-
-IF changing: public/js/chat.js
-THEN check:
-  → renderContacts(), renderMessages()
-  → selectChat() flow
-  → Message sending flow
-  → AI toggle state
-
-IF changing: public/js/socket-handlers.js
-THEN check:
-  → Backend Socket.IO emissions
-  → State updates
-  → Chat/UI refresh calls
-```
-
----
-
-# 📁 KEY FILES
-
-| Area | File |
-|------|------|
-| Main Server | `index.js` |
-| Config Storage | `config.json` |
-| Dashboard HTML | `public/index.html` |
-| App Entry | `public/js/app.js` |
-| Shared State | `public/js/state.js` |
-| DOM Utils | `public/js/dom.js` |
-| IndexedDB | `public/js/db.js` |
-| Chat Logic | `public/js/chat.js` |
-| Search | `public/js/search.js` |
-| Socket Events | `public/js/socket-handlers.js` |
-| UI Handlers | `public/js/ui-handlers.js` |
-| Event Bindings | `public/js/events.js` |
-
----
-
-# ✅ CHANGE CHECKLISTS
-
-## Adding New API Endpoint
-1. [ ] Add route in `index.js`
-2. [ ] Add Socket.IO emission if real-time needed
-3. [ ] Update frontend to call new endpoint
-4. [ ] Add test in `tests/`
-
-## Modifying Chat UI
-1. [ ] Update HTML in `public/index.html`
-2. [ ] Update CSS if needed
-3. [ ] Update `chat.js` render functions
-4. [ ] Test with `npx playwright test`
-
-## Changing AI Behavior
-1. [ ] Update `systemPrompt` in `config.json`
-2. [ ] Or update `getAIClient()` in `index.js`
-3. [ ] Test with real WhatsApp messages
-
----
-
-# 🚫 ALREADY IMPLEMENTED (Don't Re-propose)
-
-- Socket.IO real-time updates
-- IndexedDB local persistence (db.js)
-- QR code display for WhatsApp login
-- AI toggle per chat (pause/resume)
-- Context menu for chat operations
-- Settings panel (API key, model, prompt)
-- Message search with highlighting
-- Modular JS architecture (9 modules)
-- Connection status indicator
-- Global error handlers
-
----
-
-# 🌐 ENVIRONMENT VARIABLES
-
-In `.env`:
-```
-API_KEY=your-openrouter-api-key
-BASE_URL=https://openrouter.ai/api/v1
-```
-
-Or configure via Dashboard Settings panel.
-
----
-
-# ⚙️ CONFIGURATION (config.json)
-
-```javascript
-{
-  "apiKey": "sk-or-v1-...",           // OpenRouter API key
-  "baseUrl": "https://openrouter.ai/api/v1",
-  "modelName": "google/gemma-3n-e4b-it", // AI model
-  "systemPrompt": "...",              // Bot personality
-  "pausedChats": ["jid@s.whatsapp.net"] // Paused AI chats
-}
-```
+| Endpoint | Method | Body | Description |
+|----------|--------|------|-------------|
+| `/api/status` | GET | - | Get connection status, QR, config, pausedChats |
+| `/api/conversations` | GET | - | Get all conversation summaries |
+| `/api/conversation/:jid` | GET | - | Get single conversation with messages |
+| `/api/contact/:jid` | PUT | `{ name }` | Update contact name |
+| `/api/contact/:jid` | DELETE | - | Delete contact |
+| `/api/message` | DELETE | `{ jid, messageId }` | Delete a message |
+| `/api/settings` | POST | `{ apiKey, baseUrl, modelName, systemPrompt }` | Update settings |
+| `/api/send` | POST | `{ remoteJid, text }` | Send WhatsApp message |
+| `/api/toggle-bot` | POST | `{ remoteJid, action: 'pause'/'resume' }` | Toggle AI for chat |
+| `/api/health` | GET | - | Health check (in index.js) |
+| `/api/debug/conversations` | GET | - | Debug conversation data |
+| `/api/debug/simulate-message` | POST | `{ jid, text }` | Simulate incoming message |
 
 ---
 
@@ -242,53 +142,171 @@ Or configure via Dashboard Settings panel.
 ## Server → Client
 | Event | Data | Description |
 |-------|------|-------------|
-| `qr` | `{ qr, message }` | QR code for login |
-| `status` | `{ status, config }` | Connection status |
-| `new_message` | `{ contact }` | New contact/message |
+| `qr` | `qr` string or null | QR code for WhatsApp login |
+| `status` | status string | Connection status |
+| `conversation_update` | `{ jid, conversation }` | Conversation updated |
+| `new_message` | `{ jid, message }` | New message received |
 | `msg_log` | `{ direction, remoteJid, text }` | Message log |
+| `contact_updated` | `{ jid, name }` | Contact renamed |
 | `contact_deleted` | `{ jid }` | Contact deleted |
-| `ai_paused` / `ai_resumed` | `{ jid }` | AI toggle |
+| `paused_update` | `{ remoteJid, isPaused }` | AI toggle status |
+| `ai_error` | `{ jid, error }` | AI generation failed |
 
-## Client → Server (via API)
-| Endpoint | Method | Body |
-|----------|--------|------|
-| `/api/status` | GET | - |
-| `/api/conversations` | GET | - |
-| `/api/messages/:jid` | GET | - |
-| `/api/send` | POST | `{ jid, message }` |
-| `/api/config` | POST | `{ apiKey, baseUrl, model, prompt }` |
-| `/api/toggle-ai` | POST | `{ jid, pause }` |
-| `/api/contact` | DELETE | `{ jid }` |
+---
+
+# 📁 KEY MODULES
+
+## Backend (src/)
+
+| File | Exports | Purpose |
+|------|---------|---------|
+| `ai.js` | `generateResponse(messages, config)` | OpenRouter API call with error handling |
+| `config.js` | `loadConfig()`, `saveConfig()`, `initConfig()` | JSON file persistence |
+| `conversations.js` | `loadConversations()`, `saveConversations()`, `forceSaveConversations()` | Conversation persistence with debounce |
+| `logger.js` | `log(category, message, data)` | Structured console logging |
+| `routes.js` | `setupRoutes(app, getState, io)` | All Express API routes |
+| `whatsapp.js` | `connectToWhatsApp(getState, setState, io)` | Baileys connection, message handling |
+
+## Frontend (public/js/)
+
+| File | Key Exports | Purpose |
+|------|-------------|---------|
+| `state.js` | `default state`, `RETRY_CONFIG` | Getter-based shared state object |
+| `dom.js` | `els`, `$()`, `formatTime()`, `escapeHtml()` | DOM utilities |
+| `db.js` | `initDB()`, `saveConversation()`, `getAllConversations()` | IndexedDB wrapper |
+| `chat.js` | `renderContacts()`, `renderMessages()`, `selectChat()`, `sendMessage()` | Chat UI logic |
+| `search.js` | `toggleMessageSearch()`, `searchMessages()`, `navigateSearchResult()` | Message search |
+| `socket-handlers.js` | `socket`, `updateConnectionIndicator()` | Socket.IO handlers |
+| `ui-handlers.js` | `toggleSettings()`, `showContextMenu()`, `showQR()` | UI interactions |
+| `events.js` | `bindClickEvents()`, `exposeGlobalFunctions()` | Event binding |
+| `app.js` | - | Entry point, initialization |
+
+---
+
+# 🔗 DEPENDENCY CHAINS
+
+## Backend State Flow
+```
+index.js (main)
+  ├── state object: { sock, currentConfig, qrCodeData, status, pausedChats, conversations }
+  ├── getState() → returns state
+  ├── setState(updates) → merges updates into state
+  │
+  ├── src/routes.js → uses getState() for all API handlers
+  ├── src/whatsapp.js → uses getState/setState for connection & messages
+  └── src/conversations.js → loads/saves conversations to JSON
+```
+
+## Frontend State Flow
+```
+public/js/state.js
+  └── Single const object with getters (no mutable exports)
+  └── state.conversations, state.currentJid, etc. via getters
+  └── state.setConversations(), state.setCurrentJid() for mutations
+  
+All modules: import state from './state.js'
+```
+
+---
+
+# ⚠️ KNOWN GOTCHAS
+
+1. **API Parameter Names**: 
+   - `/api/send` expects `{ remoteJid, text }` NOT `{ jid, message }`
+   - `/api/toggle-bot` expects `{ remoteJid, action }` NOT `{ jid, pause }`
+
+2. **Frontend State Pattern**:
+   - Uses getter-based object: `state.conversations` (getter), `state.setConversations()` (setter)
+   - Import as: `import state from './state.js'` (default export)
+   - RETRY_CONFIG is named export: `import state, { RETRY_CONFIG } from './state.js'`
+
+3. **Conversation Persistence**:
+   - Backend: `src/conversations.js` saves to `conversations.json` with 5s debounce
+   - Frontend: `public/js/db.js` saves to IndexedDB
+   - Both should stay in sync via Socket.IO events
+
+4. **WhatsApp Session**:
+   - Stored in `auth_info_baileys/` (gitignored)
+   - Delete folder to force re-login via QR
+
+---
+
+# ✅ CHANGE CHECKLISTS
+
+## Adding New API Endpoint
+1. [ ] Add route in `src/routes.js`
+2. [ ] Use `getState()` to access shared state
+3. [ ] Emit Socket.IO event if real-time update needed
+4. [ ] Update frontend to call new endpoint
+5. [ ] Add test in `tests/`
+
+## Modifying Chat UI
+1. [ ] Update HTML in `public/index.html`
+2. [ ] Update render functions in `chat.js`
+3. [ ] Update DOM references in `dom.js` if new elements
+4. [ ] Test with `npx playwright test`
+
+## Changing AI Behavior
+1. [ ] Update `systemPrompt` via Dashboard Settings
+2. [ ] Or modify `src/ai.js` for logic changes
+3. [ ] Check error handling in `generateResponse()`
+
+## Modifying State
+1. [ ] Add getter in `state.js` object
+2. [ ] Add setter method in `state.js` object
+3. [ ] Update all modules that need the new state
+
+---
+
+# 🚫 ALREADY IMPLEMENTED
+
+- ✅ Socket.IO real-time updates
+- ✅ IndexedDB local persistence (db.js)
+- ✅ JSON file backend persistence (conversations.js)
+- ✅ QR code display for WhatsApp login
+- ✅ AI toggle per chat (pause/resume)
+- ✅ Context menu for chat operations
+- ✅ Settings panel (API key, model, prompt)
+- ✅ Message search with highlighting
+- ✅ Modular JS architecture (9 frontend + 6 backend modules)
+- ✅ Connection status indicator with auto-hide
+- ✅ Global error handlers (error, unhandledrejection)
+- ✅ Retry utility with exponential backoff
+- ✅ Rate limiting middleware
+
+---
+
+# 🌐 ENVIRONMENT VARIABLES (.env)
+
+```env
+API_KEY=your-openrouter-api-key
+BASE_URL=https://openrouter.ai/api/v1
+```
+
+# ⚙️ CONFIGURATION (config.json)
+
+```json
+{
+  "apiKey": "sk-or-v1-...",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "modelName": "google/gemma-3n-e4b-it:free",
+  "systemPrompt": "You are a helpful assistant...",
+  "pausedChats": ["jid@s.whatsapp.net"]
+}
+```
 
 ---
 
 # 🐛 DEBUG MODE
 
-Set in `index.js`:
+Health check endpoint: `GET /api/health`
+
+Debug endpoints (dev only):
+- `GET /api/debug/conversations` - List all conversations
+- `POST /api/debug/simulate-message` - Simulate incoming message
+
+Backend logging uses `src/logger.js`:
 ```javascript
-const DEBUG = true; // Enable verbose logging
-```
-
-Categories: `INIT`, `SOCKET`, `WA`, `AI`, `MSG`, `API`, `PAUSE`, `RESUME`
-
----
-
-# 📝 FRONTEND MODULE PATTERN
-
-All frontend JS uses ES6 modules:
-```javascript
-// state.js - Shared state with setters
-export let conversations = {};
-export function setConversations(convs) { conversations = convs; }
-
-// Other modules import state
-import * as state from './state.js';
-state.setConversations({...});
-```
-
-Global functions for inline onclick handlers are exposed via `window`:
-```javascript
-// In app.js
-window.selectChat = Chat.selectChat;
-window.showContextMenu = UI.showContextMenu;
+log('CATEGORY', 'Message', { data });
+// Categories: INIT, SOCKET, WA, AI, MSG, API, PAUSE, ERROR
 ```
