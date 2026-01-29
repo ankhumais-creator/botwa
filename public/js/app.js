@@ -231,79 +231,98 @@ const els = {
 };
 
 // ============ INITIALIZATION ============
+// Helper: Initialize database and load cached conversations
+async function initDatabase() {
+    await DB.initDB();
+    console.log('🗄️ Database ready');
+
+    const cachedConvs = await DB.getAllConversations();
+    cachedConvs.forEach(c => {
+        conversations[c.jid] = c;
+    });
+
+    if (cachedConvs.length > 0) {
+        renderContacts();
+        console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
+    }
+
+    return cachedConvs.length;
+}
+
+// Helper: Populate settings form fields
+function populateSettingsForm(config) {
+    const fields = [
+        { id: 'inp-url', value: config.baseUrl },
+        { id: 'inp-key', value: config.apiKey },
+        { id: 'inp-model', value: config.modelName },
+        { id: 'inp-prompt', value: config.systemPrompt }
+    ];
+
+    fields.forEach(({ id, value }) => {
+        const el = $(id);
+        if (el) el.value = value || '';
+    });
+}
+
+// Helper: Fetch status and apply configuration
+async function initStatusAndConfig() {
+    const statusRes = await fetchWithRetry('/api/status');
+    const statusData = await statusRes.json();
+
+    pausedChats = new Set(statusData.pausedChats || []);
+    populateSettingsForm(statusData.config);
+
+    if (statusData.qr) showQR(statusData.qr);
+    updateConnectionStatus(statusData.status);
+
+    return statusData;
+}
+
+// Helper: Sync conversations from server to local storage
+async function syncConversationsFromServer() {
+    const convRes = await fetchWithRetry('/api/conversations');
+    const convData = await convRes.json();
+
+    for (const conv of convData) {
+        conversations[conv.jid] = conv;
+        await DB.saveConversation(conv.jid, conv);
+    }
+
+    renderContacts();
+    console.log('✅ App initialized with', convData.length, 'conversations');
+}
+
+// Helper: Handle initialization failure
+function handleInitializationFailure() {
+    console.error('🚨 All initialization attempts failed. Entering offline mode.');
+    updateConnectionIndicator('offline');
+
+    if (Object.keys(conversations).length > 0) {
+        renderContacts();
+    }
+}
+
+// Main initialization function (reduced complexity)
 async function init() {
-    let attempts = 0;
     const maxAttempts = 3;
 
-    while (attempts < maxAttempts) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            console.log(`🚀 Initialization attempt ${attempts + 1}/${maxAttempts}`);
+            console.log(`🚀 Initialization attempt ${attempt}/${maxAttempts}`);
 
-            // 🗄️ Initialize IndexedDB first
-            await DB.initDB();
-            console.log('🗄️ Database ready');
+            await initDatabase();
+            await initStatusAndConfig();
+            await syncConversationsFromServer();
 
-            // 📦 Load conversations from IndexedDB (cache)
-            const cachedConvs = await DB.getAllConversations();
-            cachedConvs.forEach(c => {
-                conversations[c.jid] = c;
-            });
-
-            // Render cached data immediately (instant load!)
-            if (cachedConvs.length > 0) {
-                renderContacts();
-                console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
-            }
-
-            // Fetch status & config
-            const statusRes = await fetchWithRetry('/api/status');
-            const statusData = await statusRes.json();
-
-            pausedChats = new Set(statusData.pausedChats || []);
-
-            // Populate settings form
-            if ($('inp-url')) $('inp-url').value = statusData.config.baseUrl || '';
-            if ($('inp-key')) $('inp-key').value = statusData.config.apiKey || '';
-            if ($('inp-model')) $('inp-model').value = statusData.config.modelName || '';
-            if ($('inp-prompt')) $('inp-prompt').value = statusData.config.systemPrompt || '';
-
-            // Show QR if needed
-            if (statusData.qr) showQR(statusData.qr);
-
-            // Update connection status indicator
-            updateConnectionStatus(statusData.status);
-
-            // 🔄 Fetch fresh conversations from server
-            const convRes = await fetchWithRetry('/api/conversations');
-            const convData = await convRes.json();
-
-            // Merge and save to IndexedDB
-            for (const conv of convData) {
-                conversations[conv.jid] = conv;
-                await DB.saveConversation(conv.jid, conv);
-            }
-
-            renderContacts();
-            console.log('✅ App initialized with', convData.length, 'conversations');
-
-            // Success - break loop
-            return;
-
+            return; // Success
         } catch (err) {
-            attempts++;
-            console.error(`❌ Init attempt ${attempts} failed:`, err);
+            console.error(`❌ Init attempt ${attempt} failed:`, err);
 
-            if (attempts >= maxAttempts) {
-                console.error('🚨 All initialization attempts failed. Entering offline mode.');
-                updateConnectionIndicator('offline');
-                // Ensure contacts are at least rendered from cache
-                if (Object.keys(conversations).length > 0) {
-                    renderContacts();
-                }
+            if (attempt >= maxAttempts) {
+                handleInitializationFailure();
                 return;
             }
 
-            // Wait before retrying (2s)
             await new Promise(r => setTimeout(r, 2000));
         }
     }
@@ -903,7 +922,7 @@ function searchMessages(query) {
 
     if (searchResults.length > 0) {
         // Highlight all results
-        searchResults.forEach((result, i) => {
+        searchResults.forEach((result) => {
             highlightText(result.textDiv, result.text, searchQuery);
         });
 
@@ -1108,317 +1127,163 @@ globalThis.showChatMenu = showChatMenu;
 globalThis.deleteMessage = deleteMessage;
 
 // ============ EVENT LISTENERS (DEFENSIVE PROGRAMMING) ============
+
+// Declarative configuration for click event handlers
+const CLICK_EVENT_CONFIG = [
+    // Modal buttons
+    { id: 'btn-start-chat', handler: confirmNewChat, preventDefault: true, stopPropagation: true, critical: true },
+    { id: 'btn-cancel-chat', handler: closeNewChatModal, preventDefault: true, stopPropagation: true, critical: true },
+
+    // Header buttons
+    { id: 'btn-new-chat', handler: openNewChat, preventDefault: true },
+    { id: 'btn-settings-avatar', handler: toggleSettings, preventDefault: true },
+    { id: 'btn-settings-menu', handler: toggleSettings, preventDefault: true },
+    { id: 'btn-close-settings', handler: toggleSettings, preventDefault: true },
+
+    // Chat controls
+    { id: 'btn-toggle-ai', handler: toggleAI, preventDefault: true },
+    { id: 'btn-chat-menu', handler: showChatMenu, preventDefault: true, stopPropagation: true, passEvent: true },
+    { id: 'btn-send-message', handler: sendMessage, preventDefault: true },
+
+    // Menu items (with afterAction to close menu)
+    { id: 'btn-menu-toggle-ai', handler: toggleAI, closeMenu: true },
+    { id: 'btn-menu-export-chat', handler: exportChat, closeMenu: true },
+    { id: 'btn-menu-clear-chat', handler: clearChat, closeMenu: true },
+
+    // Settings panel
+    { id: 'btn-save-settings', handler: saveSettings, preventDefault: true },
+    { id: 'btn-shutdown', handler: shutdown, preventDefault: true },
+
+    // Context menu
+    { id: 'btn-rename-contact', handler: renameContact, preventDefault: true },
+    { id: 'btn-delete-contact', handler: deleteContact, preventDefault: true },
+
+    // Search controls
+    { id: 'btn-search-messages', handler: toggleMessageSearch, preventDefault: true },
+    { id: 'btn-search-prev', handler: () => navigateSearchResult('prev'), preventDefault: true },
+    { id: 'btn-search-next', handler: () => navigateSearchResult('next'), preventDefault: true },
+    { id: 'btn-close-search', handler: toggleMessageSearch, preventDefault: true }
+];
+
+// Declarative configuration for keypress event handlers
+const KEYPRESS_EVENT_CONFIG = [
+    { id: 'new-chat-input', key: 'Enter', handler: confirmNewChat, preventDefault: true },
+    { id: 'message-input', key: 'Enter', handler: sendMessage }
+];
+
+// Helper: Hide chat menu
+function hideChatMenu() {
+    document.getElementById('chat-menu')?.classList.add('hidden');
+}
+
+// Helper: Bind all click event listeners from config
+function bindClickEvents() {
+    CLICK_EVENT_CONFIG.forEach(config => {
+        const element = document.getElementById(config.id);
+
+        if (!element) {
+            if (config.critical) {
+                console.error(`❌ ${config.id} NOT FOUND!`);
+            }
+            return;
+        }
+
+        element.addEventListener('click', (e) => {
+            console.log(`🔘 ${config.id} clicked`);
+
+            if (config.preventDefault) e.preventDefault();
+            if (config.stopPropagation) e.stopPropagation();
+
+            config.passEvent ? config.handler(e) : config.handler();
+
+            if (config.closeMenu) hideChatMenu();
+        });
+
+        console.log(`✅ ${config.id} listener attached`);
+    });
+}
+
+// Helper: Bind all keypress event listeners from config
+function bindKeypressEvents() {
+    KEYPRESS_EVENT_CONFIG.forEach(config => {
+        const element = document.getElementById(config.id);
+        if (!element) return;
+
+        element.addEventListener('keypress', (e) => {
+            if (e.key === config.key) {
+                console.log(`🔘 ${config.key} pressed in ${config.id}`);
+                if (config.preventDefault) e.preventDefault();
+                config.handler();
+            }
+        });
+
+        console.log(`✅ ${config.id} keypress listener attached`);
+    });
+}
+
+// Helper: Check if value is autofill garbage
+function isAutofillGarbage(value) {
+    return value.includes('http') ||
+        value.includes('openrouter') ||
+        value.includes('api') ||
+        (value.includes('.') && value.length > 20);
+}
+
+// Helper: Setup search input with autofill protection
+function setupSearchInput() {
+    const searchInput = document.getElementById('search-input');
+    if (!searchInput) return;
+
+    // Clear autofill garbage on load
+    if (isAutofillGarbage(searchInput.value)) {
+        console.log('⚠️ Clearing autofill garbage from search:', searchInput.value);
+        searchInput.value = '';
+        renderContacts();
+    }
+
+    // Input event for filtering
+    searchInput.addEventListener('input', filterContacts);
+
+    // Focus/blur events to clear autofill garbage
+    ['focus', 'blur'].forEach(eventType => {
+        searchInput.addEventListener(eventType, () => {
+            if (isAutofillGarbage(searchInput.value)) {
+                console.log(`⚠️ Clearing autofill on ${eventType}`);
+                searchInput.value = '';
+                renderContacts();
+            }
+        });
+    });
+
+    console.log('✅ search-input listeners attached');
+}
+
+// Helper: Setup message search input
+function setupMessageSearchInput() {
+    const searchMessagesInput = document.getElementById('search-messages-input');
+    if (!searchMessagesInput) return;
+
+    searchMessagesInput.addEventListener('input', (e) => {
+        searchMessages(e.target.value.trim());
+    });
+
+    searchMessagesInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') toggleMessageSearch();
+    });
+
+    console.log('✅ search-messages-input listeners attached');
+}
+
+// Main DOMContentLoaded handler (reduced complexity)
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 DOMContentLoaded fired. Initializing app...');
 
-    // ⚠️ CRITICAL: Initialize app AFTER DOM is ready
     await init();
 
-    // ===== MODAL BUTTONS =====
-    const btnStartChat = document.getElementById('btn-start-chat');
-    const btnCancelChat = document.getElementById('btn-cancel-chat');
-    const newChatInput = document.getElementById('new-chat-input');
-
-    if (btnStartChat) {
-        btnStartChat.addEventListener('click', (e) => {
-            console.log('🔘 Start Chat clicked via addEventListener');
-            e.preventDefault();
-            e.stopPropagation();
-            confirmNewChat();
-        });
-        console.log('✅ btn-start-chat listener attached');
-    } else {
-        console.error('❌ btn-start-chat NOT FOUND!');
-    }
-
-    if (btnCancelChat) {
-        btnCancelChat.addEventListener('click', (e) => {
-            console.log('🔘 Cancel Chat clicked');
-            e.preventDefault();
-            e.stopPropagation();
-            closeNewChatModal();
-        });
-        console.log('✅ btn-cancel-chat listener attached');
-    } else {
-        console.error('❌ btn-cancel-chat NOT FOUND!');
-    }
-
-    // Enter key for new chat input
-    if (newChatInput) {
-        newChatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                console.log('🔘 Enter pressed in new chat input');
-                e.preventDefault();
-                confirmNewChat();
-            }
-        });
-        console.log('✅ new-chat-input listener attached');
-    }
-
-    // ===== HEADER BUTTONS =====
-    const btnNewChat = document.getElementById('btn-new-chat');
-    const btnSettingsAvatar = document.getElementById('btn-settings-avatar');
-    const btnSettingsMenu = document.getElementById('btn-settings-menu');
-    const btnCloseSettings = document.getElementById('btn-close-settings');
-
-    if (btnNewChat) {
-        btnNewChat.addEventListener('click', (e) => {
-            console.log('🔘 New Chat button clicked');
-            e.preventDefault();
-            openNewChat();
-        });
-        console.log('✅ btn-new-chat listener attached');
-    }
-
-    if (btnSettingsAvatar) {
-        btnSettingsAvatar.addEventListener('click', (e) => {
-            console.log('🔘 Settings Avatar clicked');
-            e.preventDefault();
-            toggleSettings();
-        });
-        console.log('✅ btn-settings-avatar listener attached');
-    }
-
-    if (btnSettingsMenu) {
-        btnSettingsMenu.addEventListener('click', (e) => {
-            console.log('🔘 Settings Menu clicked');
-            e.preventDefault();
-            toggleSettings();
-        });
-        console.log('✅ btn-settings-menu listener attached');
-    }
-
-    if (btnCloseSettings) {
-        btnCloseSettings.addEventListener('click', (e) => {
-            console.log('🔘 Close Settings clicked');
-            e.preventDefault();
-            toggleSettings();
-        });
-        console.log('✅ btn-close-settings listener attached');
-    }
-
-    // ===== CHAT CONTROLS =====
-    const btnToggleAI = document.getElementById('btn-toggle-ai');
-    const btnSendMessage = document.getElementById('btn-send-message');
-    const messageInput = document.getElementById('message-input');
-
-    if (btnToggleAI) {
-        btnToggleAI.addEventListener('click', (e) => {
-            console.log('🔘 AI Toggle clicked');
-            e.preventDefault();
-            toggleAI();
-        });
-        console.log('✅ btn-toggle-ai listener attached');
-    }
-
-    // Chat header menu button (3 dots)
-    const btnChatMenu = document.getElementById('btn-chat-menu');
-    if (btnChatMenu) {
-        btnChatMenu.addEventListener('click', (e) => {
-            console.log('🔘 Chat Menu clicked');
-            e.preventDefault();
-            e.stopPropagation();
-            showChatMenu(e);
-        });
-        console.log('✅ btn-chat-menu listener attached');
-    }
-
-    // Chat menu items
-    const btnMenuToggleAI = document.getElementById('btn-menu-toggle-ai');
-    const btnMenuExportChat = document.getElementById('btn-menu-export-chat');
-    const btnMenuClearChat = document.getElementById('btn-menu-clear-chat');
-
-    if (btnMenuToggleAI) {
-        btnMenuToggleAI.addEventListener('click', () => {
-            console.log('🔘 Menu: Toggle AI clicked');
-            toggleAI();
-            document.getElementById('chat-menu')?.classList.add('hidden');
-        });
-        console.log('✅ btn-menu-toggle-ai listener attached');
-    }
-
-    if (btnMenuExportChat) {
-        btnMenuExportChat.addEventListener('click', () => {
-            console.log('🔘 Menu: Export Chat clicked');
-            exportChat();
-            document.getElementById('chat-menu')?.classList.add('hidden');
-        });
-        console.log('✅ btn-menu-export-chat listener attached');
-    }
-
-    if (btnMenuClearChat) {
-        btnMenuClearChat.addEventListener('click', () => {
-            console.log('🔘 Menu: Clear Chat clicked');
-            clearChat();
-            document.getElementById('chat-menu')?.classList.add('hidden');
-        });
-        console.log('✅ btn-menu-clear-chat listener attached');
-    }
-
-    if (btnSendMessage) {
-        btnSendMessage.addEventListener('click', (e) => {
-            console.log('🔘 Send Message clicked');
-            e.preventDefault();
-            sendMessage();
-        });
-        console.log('✅ btn-send-message listener attached');
-    }
-
-    if (messageInput) {
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                console.log('🔘 Enter pressed in message input');
-                sendMessage();
-            }
-        });
-        console.log('✅ message-input listener attached');
-    }
-
-    // ===== SETTINGS PANEL =====
-    const btnSaveSettings = document.getElementById('btn-save-settings');
-    const btnShutdown = document.getElementById('btn-shutdown');
-
-    if (btnSaveSettings) {
-        btnSaveSettings.addEventListener('click', (e) => {
-            console.log('🔘 Save Settings clicked');
-            e.preventDefault();
-            saveSettings();
-        });
-        console.log('✅ btn-save-settings listener attached');
-    }
-
-    if (btnShutdown) {
-        btnShutdown.addEventListener('click', (e) => {
-            console.log('🔘 Shutdown clicked');
-            e.preventDefault();
-            shutdown();
-        });
-        console.log('✅ btn-shutdown listener attached');
-    }
-
-    // ===== CONTEXT MENU =====
-    const btnRenameContact = document.getElementById('btn-rename-contact');
-    const btnDeleteContact = document.getElementById('btn-delete-contact');
-
-    if (btnRenameContact) {
-        btnRenameContact.addEventListener('click', (e) => {
-            console.log('🔘 Rename Contact clicked');
-            e.preventDefault();
-            renameContact();
-        });
-        console.log('✅ btn-rename-contact listener attached');
-    }
-
-    if (btnDeleteContact) {
-        btnDeleteContact.addEventListener('click', (e) => {
-            console.log('🔘 Delete Contact clicked');
-            e.preventDefault();
-            deleteContact();
-        });
-        console.log('✅ btn-delete-contact listener attached');
-    }
-
-    // ===== SEARCH INPUT =====
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        // AGGRESSIVE: Clear autofill garbage immediately on load
-        if (searchInput.value.includes('http') ||
-            searchInput.value.includes('openrouter') ||
-            searchInput.value.includes('api') ||
-            searchInput.value.includes('.') && searchInput.value.length > 20) {
-            console.log('⚠️ Clearing autofill garbage from search:', searchInput.value);
-            searchInput.value = '';
-            renderContacts(); // Re-render to show all contacts
-        }
-
-        // Input event for filtering
-        searchInput.addEventListener('input', () => {
-            filterContacts();
-        });
-
-        // Focus event to clear autofill garbage
-        searchInput.addEventListener('focus', () => {
-            if (searchInput.value.includes('http') ||
-                searchInput.value.includes('openrouter') ||
-                searchInput.value.includes('api')) {
-                console.log('⚠️ Clearing autofill on focus');
-                searchInput.value = '';
-                renderContacts();
-            }
-        });
-
-        // Blur event - double check after user leaves field
-        searchInput.addEventListener('blur', () => {
-            if (searchInput.value.includes('http') ||
-                searchInput.value.includes('openrouter') ||
-                searchInput.value.includes('api')) {
-                console.log('⚠️ Clearing autofill on blur');
-                searchInput.value = '';
-                renderContacts();
-            }
-        });
-
-        console.log('✅ search-input listeners attached');
-    }
-
-    // ===== MESSAGE SEARCH =====
-    const btnSearchMessages = document.getElementById('btn-search-messages');
-    const searchMessagesInput = document.getElementById('search-messages-input');
-    const btnSearchPrev = document.getElementById('btn-search-prev');
-    const btnSearchNext = document.getElementById('btn-search-next');
-    const btnCloseSearch = document.getElementById('btn-close-search');
-
-    if (btnSearchMessages) {
-        btnSearchMessages.addEventListener('click', (e) => {
-            console.log('🔘 Search messages clicked');
-            e.preventDefault();
-            toggleMessageSearch();
-        });
-        console.log('✅ btn-search-messages listener attached');
-    }
-
-    if (searchMessagesInput) {
-        searchMessagesInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim();
-            searchMessages(query);
-        });
-
-        // Escape key to close search
-        searchMessagesInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                toggleMessageSearch();
-            }
-        });
-
-        console.log('✅ search-messages-input listeners attached');
-    }
-
-    if (btnSearchPrev) {
-        btnSearchPrev.addEventListener('click', (e) => {
-            console.log('🔘 Previous search result');
-            e.preventDefault();
-            navigateSearchResult('prev');
-        });
-        console.log('✅ btn-search-prev listener attached');
-    }
-
-    if (btnSearchNext) {
-        btnSearchNext.addEventListener('click', (e) => {
-            console.log('🔘 Next search result');
-            e.preventDefault();
-            navigateSearchResult('next');
-        });
-        console.log('✅ btn-search-next listener attached');
-    }
-
-    if (btnCloseSearch) {
-        btnCloseSearch.addEventListener('click', (e) => {
-            console.log('🔘 Close search');
-            e.preventDefault();
-            toggleMessageSearch();
-        });
-        console.log('✅ btn-close-search listener attached');
-    }
+    bindClickEvents();
+    bindKeypressEvents();
+    setupSearchInput();
+    setupMessageSearchInput();
 
     console.log('✅✅✅ ALL EVENT LISTENERS ATTACHED SUCCESSFULLY!');
 });
