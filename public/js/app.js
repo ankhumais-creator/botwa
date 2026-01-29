@@ -7,7 +7,7 @@
 import * as DB from './db.js';
 import * as state from './state.js';
 import { els, $ } from './dom.js';
-import { renderContacts, updateAIToggle } from './chat.js';
+import { renderContacts } from './chat.js';
 import { showQR, updateConnectionStatus } from './ui-handlers.js';
 import { bindClickEvents, bindKeypressEvents, setupSearchInput, setupMessageSearchInput, exposeGlobalFunctions } from './events.js';
 
@@ -42,73 +42,76 @@ async function fetchWithRetry(url, options = {}, retries = state.RETRY_CONFIG.ma
     }
 }
 
+// ============ HELPER FUNCTIONS ============
+function populateSettingsForm(config) {
+    if ($('inp-url')) $('inp-url').value = config?.baseUrl || '';
+    if ($('inp-key')) $('inp-key').value = config?.apiKey || '';
+    if ($('inp-model')) $('inp-model').value = config?.modelName || '';
+    if ($('inp-prompt')) $('inp-prompt').value = config?.systemPrompt || '';
+}
+
+async function loadCachedConversations() {
+    const cachedConvs = await DB.getAllConversations();
+    for (const c of cachedConvs) {
+        state.conversations[c.jid] = c;
+    }
+    if (cachedConvs.length > 0) {
+        renderContacts();
+        console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
+    }
+    return cachedConvs.length;
+}
+
+async function syncConversationsFromServer() {
+    const convRes = await fetchWithRetry('/api/conversations');
+    const convData = await convRes.json();
+    for (const conv of convData) {
+        state.conversations[conv.jid] = conv;
+        await DB.saveConversation(conv.jid, conv);
+    }
+    return convData.length;
+}
+
+function enterOfflineMode() {
+    console.error('🚨 All initialization attempts failed. Entering offline mode.');
+    if (Object.keys(state.conversations).length > 0) {
+        renderContacts();
+    }
+}
+
 // ============ INITIALIZATION ============
 async function init() {
-    let attempts = 0;
     const maxAttempts = 3;
 
-    while (attempts < maxAttempts) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            console.log(`🚀 Initialization attempt ${attempts + 1}/${maxAttempts}`);
+            console.log(`🚀 Initialization attempt ${attempt}/${maxAttempts}`);
 
-            // Initialize database
             await DB.initDB();
             console.log('🗄️ Database ready');
 
-            // Load cached conversations
-            const cachedConvs = await DB.getAllConversations();
-            cachedConvs.forEach(c => {
-                state.conversations[c.jid] = c;
-            });
+            await loadCachedConversations();
 
-            if (cachedConvs.length > 0) {
-                renderContacts();
-                console.log('✅ Loaded from cache:', cachedConvs.length, 'conversations');
-            }
-
-            // Fetch status & config
             const statusRes = await fetchWithRetry('/api/status');
             const statusData = await statusRes.json();
 
             state.setPausedChats(new Set(statusData.pausedChats || []));
+            populateSettingsForm(statusData.config);
 
-            // Populate settings form
-            if ($('inp-url')) $('inp-url').value = statusData.config?.baseUrl || '';
-            if ($('inp-key')) $('inp-key').value = statusData.config?.apiKey || '';
-            if ($('inp-model')) $('inp-model').value = statusData.config?.modelName || '';
-            if ($('inp-prompt')) $('inp-prompt').value = statusData.config?.systemPrompt || '';
-
-            // Show QR if needed
             if (statusData.qr) showQR(statusData.qr);
-
-            // Update connection status
             updateConnectionStatus(statusData.status);
 
-            // Sync conversations from server
-            const convRes = await fetchWithRetry('/api/conversations');
-            const convData = await convRes.json();
-
-            for (const conv of convData) {
-                state.conversations[conv.jid] = conv;
-                await DB.saveConversation(conv.jid, conv);
-            }
-
+            const convCount = await syncConversationsFromServer();
             renderContacts();
-            console.log('✅ App initialized with', convData.length, 'conversations');
+            console.log('✅ App initialized with', convCount, 'conversations');
             return;
 
         } catch (err) {
-            attempts++;
-            console.error(`❌ Init attempt ${attempts} failed:`, err);
-
-            if (attempts >= maxAttempts) {
-                console.error('🚨 All initialization attempts failed. Entering offline mode.');
-                if (Object.keys(state.conversations).length > 0) {
-                    renderContacts();
-                }
+            console.error(`❌ Init attempt ${attempt} failed:`, err);
+            if (attempt >= maxAttempts) {
+                enterOfflineMode();
                 return;
             }
-
             await new Promise(r => setTimeout(r, 2000));
         }
     }

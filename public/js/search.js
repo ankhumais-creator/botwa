@@ -122,7 +122,7 @@ export function clearSearchHighlights() {
             // Get original text
             const text = el.textContent;
             const textNode = document.createTextNode(text);
-            parent.replaceChild(textNode, el);
+            el.replaceWith(textNode);
             // Normalize to merge adjacent text nodes
             parent.normalize();
         }

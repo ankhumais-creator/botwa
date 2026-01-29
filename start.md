@@ -44,114 +44,114 @@ description: Auto-read when starting work on this project
 ## 📋 Quick Commands
 
 ```bash
-# Build
-npm run build:js
+# Start Server
+npm start
 
-# Test (Extension)
-npm run test:unit
-npm run test:unit:coverage
+# Test (Playwright E2E)
+npx playwright test
 
-# Test (Backend)
-cd backend && npm run test
-cd backend && npm run test:coverage
+# Test with UI
+npx playwright test --ui
 
-# Lint (output to file)
-npm run lint:report
-npm run lint:strict
+# Single test file
+npx playwright test tests/dashboard.spec.js
+
+# Lint
+npx eslint .
 ```
 
 ---
 
-## 📊 Current Status (Last Updated: 2026-01-28)
-- **Total Files: 239** (JS 75 + CSS 15 + Tests 42 + Docs 44)
-- **Total LOC: ~14,200** (Frontend 7,551 + Backend 3,632 + CSS 3,057)
-- **Tests: 654 total** (Unit 603 + E2E 51)
-- **Bundle: 99KB** | **CSS: 50KB minified** | **Coverage: 26%**
-- **CI/CD: GitHub Actions** (frontend + backend jobs)
+## 📊 Current Status (Last Updated: 2026-01-29)
+- **Backend**: Node.js + Express + Socket.IO
+- **WhatsApp**: Baileys (WhiskeySockets)
+- **AI**: OpenRouter API (DeepSeek/Gemma models)
+- **Frontend**: Vanilla JS + TailwindCSS
+- **Tests**: Playwright E2E (2 spec files)
+- **Port**: 3000
 
 ---
 
-# 🔗 DEPENDENCY CHAINS (WAJIB BACA!)
+# 🏗️ PROJECT ARCHITECTURE
+
+```
+efficient-wa-bot/
+├── index.js              # Main server (Express + Baileys + Socket.IO)
+├── config.json           # Persisted settings (API key, model, prompt)
+├── public/
+│   ├── index.html        # Dashboard UI
+│   ├── css/style.css     # Custom styles
+│   └── js/
+│       ├── app.js        # Entry point, global handlers
+│       ├── state.js      # Shared application state
+│       ├── dom.js        # DOM utilities & element getters
+│       ├── db.js         # IndexedDB persistence
+│       ├── chat.js       # Chat & message rendering
+│       ├── search.js     # In-chat message search
+│       ├── socket-handlers.js  # Socket.IO event handlers
+│       ├── ui-handlers.js      # UI event handlers (modals, context menu)
+│       └── events.js     # Event binding & keyboard shortcuts
+├── tests/
+│   ├── dashboard.spec.js   # Dashboard functionality tests
+│   └── persistence.spec.js # Settings persistence tests
+└── auth_info_baileys/    # WhatsApp session data (gitignored)
+```
+
+---
+
+# 🔗 DEPENDENCY CHAINS
 
 ## Backend Changes
 
-### Reality Check Service
+### Main Server (index.js)
 ```
-IF changing: backend/src/services/reality-check.js
+IF changing: index.js
 THEN check:
-  → backend/src/utils/ai-response-parser.js (shared parser)
-  → backend/src/routes/ai.js (line ~372)
-  → backend/src/config/prompts.js
-  → backend/src/middleware/validators.js
-  → FRONTEND: src/reality-check/rendering.js
-  → tests/unit/reality-check-v5-normalization.test.js
+  → API endpoints (/api/*)
+  → Socket.IO events (io.emit)
+  → WhatsApp connection logic (makeWASocket)
+  → AI response handler (getAIClient)
+  → FRONTEND: socket-handlers.js
 ```
 
-### AI Response Parser (SHARED UTILITY)
+### Config Persistence
 ```
-IF changing: backend/src/utils/ai-response-parser.js
+IF changing: loadConfig() or saveConfig()
 THEN check:
-  → backend/src/services/reality-check.js (uses all utilities)
-  → Any future backend service using AI JSON parsing
-```
-
-### Security Constants (SINGLE SOURCE OF TRUTH)
-```
-IF changing: src/background/security.js
-THEN check:
-  → SECURITY object = source of truth for limits
-  → src/constants.js (re-exports SECURITY)
-  → src/api/*.js files use SECURITY.MAX_TRANSCRIPT_LENGTH
-  → src/reality-check/validation.js
-```
-
-### OpenRouter Service
-```
-IF changing: backend/src/services/openrouter.js
-THEN check:
-  → backend/src/routes/ai.js
-  → backend/src/config/prompts.js
-  → FRONTEND: src/api/summary.js, src/api/chat.js
-```
-
-### Prompts (SINGLE SOURCE OF TRUTH)
-```
-IF changing: backend/src/config/prompts.js
-THEN check:
-  → backend/src/services/reality-check.js
-  → backend/src/services/openrouter.js
-  → Run: cd backend && npm test
-```
-
-### Validation Schemas
-```
-IF changing: backend/src/middleware/validators.js
-THEN check:
-  → All routes/ai.js, auth.js, credits.js
-  → FRONTEND: API calls must match schema
+  → config.json structure
+  → FRONTEND: Settings panel submission
+  → All places reading currentConfig
 ```
 
 ---
 
 ## Frontend Changes
 
-### State
+### Modular JS Structure
 ```
-IF changing: src/state.js
+IF changing: public/js/state.js
 THEN check:
-  → src/types.js
-  → src/content/main.js
-  → src/ui/*.js
-```
+  → All modules import * as state
+  → Setter functions (setConversations, setCurrentJid, etc)
+  → Socket handlers updating state
 
-### Reality Check Frontend
-```
-IF changing: src/reality-check/*.js
+IF changing: public/js/dom.js
 THEN check:
-  → rendering.js (normalizeV5Response)
-  → sidebar.html
-  → styles/components/reality-check.css
-  → tests/unit/reality-check-v5-normalization.test.js
+  → Element IDs must match index.html
+  → Other modules importing { els, $, formatTime, escapeHtml }
+
+IF changing: public/js/chat.js
+THEN check:
+  → renderContacts(), renderMessages()
+  → selectChat() flow
+  → Message sending flow
+  → AI toggle state
+
+IF changing: public/js/socket-handlers.js
+THEN check:
+  → Backend Socket.IO emissions
+  → State updates
+  → Chat/UI refresh calls
 ```
 
 ---
@@ -160,230 +160,135 @@ THEN check:
 
 | Area | File |
 |------|------|
-| Global State | `src/state.js` (typed) |
-| Type Defs | `src/types.js` |
-| Entry Point | `src/content/main.js` |
-| Reality Check | `src/reality-check/` |
-| API URLs | `config.js` |
-| CSS Classes | `styles/_class-map.css` |
-| Backend Prompts | `backend/src/config/prompts.js` |
-| Backend Services | `backend/src/services/` |
+| Main Server | `index.js` |
+| Config Storage | `config.json` |
+| Dashboard HTML | `public/index.html` |
+| App Entry | `public/js/app.js` |
+| Shared State | `public/js/state.js` |
+| DOM Utils | `public/js/dom.js` |
+| IndexedDB | `public/js/db.js` |
+| Chat Logic | `public/js/chat.js` |
+| Search | `public/js/search.js` |
+| Socket Events | `public/js/socket-handlers.js` |
+| UI Handlers | `public/js/ui-handlers.js` |
+| Event Bindings | `public/js/events.js` |
 
 ---
 
 # ✅ CHANGE CHECKLISTS
 
-## Adding New AI Feature
-1. [ ] Add Zod schema in `middleware/validators.js`
-2. [ ] Add route in `routes/ai.js`
-3. [ ] Add service in `services/openrouter.js`
-4. [ ] Add prompts in `config/prompts.js`
-5. [ ] Update `config/credit-costs.js`
-6. [ ] Add frontend API call
-7. [ ] Add tests
+## Adding New API Endpoint
+1. [ ] Add route in `index.js`
+2. [ ] Add Socket.IO emission if real-time needed
+3. [ ] Update frontend to call new endpoint
+4. [ ] Add test in `tests/`
 
-## Modifying Reality Check
-1. [ ] Update `services/reality-check.js`
-2. [ ] Update `routes/ai.js` response (~line 425)
-3. [ ] Update `middleware/validators.js` if new fields
-4. [ ] Update FRONTEND `rendering.js` normalizeV5Response
-5. [ ] Update tests
-6. [ ] Run: `npm test` + `cd backend && npm test`
+## Modifying Chat UI
+1. [ ] Update HTML in `public/index.html`
+2. [ ] Update CSS if needed
+3. [ ] Update `chat.js` render functions
+4. [ ] Test with `npx playwright test`
+
+## Changing AI Behavior
+1. [ ] Update `systemPrompt` in `config.json`
+2. [ ] Or update `getAIClient()` in `index.js`
+3. [ ] Test with real WhatsApp messages
 
 ---
 
 # 🚫 ALREADY IMPLEMENTED (Don't Re-propose)
 
-- Shadow DOM isolation - `content/main.js`
-- Playwright E2E testing - 51 tests
-- Multi-level transcript fallback - `injected.js`
-- Service Worker persistence - `background.js`
-- Debounced storage - `state.js`
-- Virtual scrolling - `transcript-ui.js`
-- Web Workers - `worker-manager.js`
-- Reality Check V5 - 5 pillars format
-- JSDoc type system - `types.js`
-- CSS class map - `_class-map.css`
+- Socket.IO real-time updates
+- IndexedDB local persistence (db.js)
+- QR code display for WhatsApp login
+- AI toggle per chat (pause/resume)
+- Context menu for chat operations
+- Settings panel (API key, model, prompt)
+- Message search with highlighting
+- Modular JS architecture (9 modules)
+- Connection status indicator
+- Global error handlers
 
 ---
 
-# 📖 V5 REALITY CHECK FORMAT
+# 🌐 ENVIRONMENT VARIABLES
 
-Backend returns:
+In `.env`:
+```
+API_KEY=your-openrouter-api-key
+BASE_URL=https://openrouter.ai/api/v1
+```
+
+Or configure via Dashboard Settings panel.
+
+---
+
+# ⚙️ CONFIGURATION (config.json)
+
 ```javascript
 {
-  verdict: 'VALID' | 'MISLEADING' | 'NEEDS_VERIFICATION' | 'INSUFFICIENT_DATA',
-  summary: string,
-  kritik: string[],
-  benar: string[],
-  perbaikan: string[],
-  saran: string[],
-  bias: { detected, type, evidence }
+  "apiKey": "sk-or-v1-...",           // OpenRouter API key
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "modelName": "google/gemma-3n-e4b-it", // AI model
+  "systemPrompt": "...",              // Bot personality
+  "pausedChats": ["jid@s.whatsapp.net"] // Paused AI chats
 }
 ```
 
-Frontend mapping (in `normalizeV5Response`):
-- VALID → 'trustworthy' (score 85)
-- MISLEADING → 'misleading' (score 25)
-- NEEDS_VERIFICATION/INSUFFICIENT_DATA → 'verify_first' (score 55)
+---
+
+# 📡 SOCKET.IO EVENTS
+
+## Server → Client
+| Event | Data | Description |
+|-------|------|-------------|
+| `qr` | `{ qr, message }` | QR code for login |
+| `status` | `{ status, config }` | Connection status |
+| `new_message` | `{ contact }` | New contact/message |
+| `msg_log` | `{ direction, remoteJid, text }` | Message log |
+| `contact_deleted` | `{ jid }` | Contact deleted |
+| `ai_paused` / `ai_resumed` | `{ jid }` | AI toggle |
+
+## Client → Server (via API)
+| Endpoint | Method | Body |
+|----------|--------|------|
+| `/api/status` | GET | - |
+| `/api/conversations` | GET | - |
+| `/api/messages/:jid` | GET | - |
+| `/api/send` | POST | `{ jid, message }` |
+| `/api/config` | POST | `{ apiKey, baseUrl, model, prompt }` |
+| `/api/toggle-ai` | POST | `{ jid, pause }` |
+| `/api/contact` | DELETE | `{ jid }` |
 
 ---
 
-# 🌐 ENVIRONMENT VARIABLES (Vercel)
+# 🐛 DEBUG MODE
 
-Required:
-- `OPENROUTER_API_KEY`
-- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
-- `JWT_SECRET`
-- `NODE_ENV=production`
+Set in `index.js`:
+```javascript
+const DEBUG = true; // Enable verbose logging
+```
 
-Optional:
-- `REDIS_URL` (caching)
-- `AI_MODEL_PREFERENCE` (default: openai/gpt-oss-20b)
+Categories: `INIT`, `SOCKET`, `WA`, `AI`, `MSG`, `API`, `PAUSE`, `RESUME`
 
 ---
 
-# ⚡ RATE LIMITING (Updated 2026-01-28)
+# 📝 FRONTEND MODULE PATTERN
 
-## Tiered Rate Limits
-| Route | Limit | Premium |
-|-------|-------|---------|
-| `/api/ai/*` | 10/min | 20/min |
-| `/api/auth/*` | 20/min | 20/min |
-| `/api/credits/*` | 60/min | 60/min |
-| `/api/user/*` | 60/min | 60/min |
-| `/api/admin/*` | 30/min | 30/min |
-| `/api/analytics/*` | 60/min | 60/min |
+All frontend JS uses ES6 modules:
+```javascript
+// state.js - Shared state with setters
+export let conversations = {};
+export function setConversations(convs) { conversations = convs; }
 
-## Key Files
-- `backend/src/middleware/rate-limit.js` - Tiered limiters
-- `backend/src/index.js` - Route middleware application
-
----
-
-# 🔄 STREAMING ARCHITECTURE
-
-## Flow Diagram
-```
-Frontend                           Backend
-────────                           ───────
-api/summary.js
-    │
-    └─► fetch('/api/ai/summary-stream')
-              │
-              ├─► routes/ai.js (SSE headers)
-              │     res.setHeader('Content-Type', 'text/event-stream')
-              │     res.setHeader('X-Accel-Buffering', 'no')
-              │
-              ├─► services/openrouter.js
-              │     generateSummaryStream() → async generator*
-              │     yields: { type: 'chunk', content }
-              │             { type: 'done', totalContent }
-              │             { type: 'error', error }
-              │
-              └─► routes/ai-helpers.js
-                    streamSummaryChunks() → SSE writer
-                    sendSSEChunk() → res.write(`data: ${JSON.stringify(data)}\n\n`)
+// Other modules import state
+import * as state from './state.js';
+state.setConversations({...});
 ```
 
-## Key Files
-| Role | File |
-|------|------|
-| SSE Setup | `routes/ai.js` lines 220-280 (summary-stream) |
-| Generator | `services/openrouter.js` `generateSummaryStream()` |
-| SSE Writer | `routes/ai-helpers.js` `streamSummaryChunks()` |
-| Frontend | `src/api/summary.js` fetch + EventSource parsing |
-
-## Streaming Changes Checklist
-1. [ ] Update generator in `services/openrouter.js`
-2. [ ] Update SSE handler in `routes/ai.js`
-3. [ ] Update helper if needed in `routes/ai-helpers.js`
-4. [ ] Test with: `curl -N POST /api/ai/summary-stream`
-
----
-
-# 🗄️ SUPABASE SCHEMA
-
-## Tables
-
-### `users`
-```sql
-id              UUID PRIMARY KEY
-google_id       TEXT UNIQUE
-email           TEXT UNIQUE
-name            TEXT
-avatar_url      TEXT
-is_premium      BOOLEAN DEFAULT false
-quota_remaining INTEGER DEFAULT 10
-quota_reset_at  TIMESTAMPTZ
-created_at      TIMESTAMPTZ DEFAULT now()
-updated_at      TIMESTAMPTZ
+Global functions for inline onclick handlers are exposed via `window`:
+```javascript
+// In app.js
+window.selectChat = Chat.selectChat;
+window.showContextMenu = UI.showContextMenu;
 ```
-
-### `usage_history`
-```sql
-id              UUID PRIMARY KEY
-user_id         UUID REFERENCES users(id)
-action_type     TEXT (summary, chat, translate, reality_check)
-video_id        TEXT
-video_title     TEXT
-tokens_used     INTEGER
-created_at      TIMESTAMPTZ DEFAULT now()
-```
-
-### `saved_summaries`
-```sql
-user_id         UUID REFERENCES users(id)
-video_id        TEXT
-video_title     TEXT
-transcript      TEXT
-summary         TEXT
-created_at      TIMESTAMPTZ DEFAULT now()
-PRIMARY KEY (user_id, video_id)
-```
-
-## DB Functions (in supabase.js)
-| Function | Description |
-|----------|-------------|
-| `findUserByGoogleId(googleId)` | Find user by Google OAuth ID |
-| `findUserByEmail(email)` | Find user by email |
-| `createUser(userData)` | Create new user |
-| `updateUser(userId, updates)` | Update user data |
-| `decrementQuota(userId)` | Decrease remaining quota by 1 |
-| `resetQuotaIfNeeded(userId)` | Monthly quota reset check |
-| `logUsage(userId, type, videoId, title, tokens)` | Log AI usage |
-| `saveSummary(userId, videoId, title, transcript, summary)` | Save/upsert summary |
-| `getSavedSummaries(userId, limit)` | Get user's saved summaries |
-| `getUsageHistory(userId, limit)` | Get user's usage history |
-
-## Database Changes Checklist
-1. [ ] Update schema in Supabase Dashboard (SQL Editor)
-2. [ ] Update `db/supabase.js` with new functions
-3. [ ] Update routes that use `db.*`
-4. [ ] Run: `cd backend && npm test`
-
----
-
-# 📊 CREDIT SYSTEM
-
-## Quota Logic
-- Free users: 10 requests/month
-- Premium users: Unlimited (`is_premium = true`)
-- Reset: 1st of each month
-
-## Credit Flow
-```
-Request → authMiddleware → quotaMiddleware → AI Route
-                              │
-                              ├─► Check is_premium
-                              ├─► Check quota_remaining > 0
-                              └─► After success: decrementQuota()
-```
-
-## Credit Check Files
-| File | Function |
-|------|----------|
-| `middleware/auth.js` | `quotaMiddleware` |
-| `db/supabase.js` | `decrementQuota()`, `resetQuotaIfNeeded()` |
-| `routes/ai.js` | All routes call `db.decrementQuota()` |
-

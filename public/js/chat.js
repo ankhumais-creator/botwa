@@ -5,7 +5,7 @@
 
 import * as DB from './db.js';
 import * as state from './state.js';
-import { els, $, formatTime, escapeHtml } from './dom.js';
+import { els, formatTime, escapeHtml } from './dom.js';
 
 // ============ RENDER CONTACTS ============
 export function renderContacts() {

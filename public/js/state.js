@@ -4,15 +4,26 @@
  */
 
 // ============ STATE ============
+// Note: Mutable let exports are intentional for this module - it provides shared
+// mutable state that other modules can read directly and mutate via setter functions.
+
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let conversations = {};
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let currentJid = null;
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let pausedChats = new Set();
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let contextMenuJid = null;
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let isSocketConnected = false;
 
 // ============ SEARCH STATE ============
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let searchResults = [];
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let currentSearchIndex = -1;
+// biome-ignore lint/style/useConst: Intentional mutable state exports
 export let searchQuery = '';
 
 // ============ CONFIG ============

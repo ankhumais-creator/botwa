@@ -71,5 +71,5 @@ export function escapeHtml(text) {
 }
 
 export function escapeRegex(string) {
-    return string.replaceAll(String.raw`[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]`, '\\$&');
+    return string.replaceAll(/[-[\]{}()*+?.,\\^$|#\s]/g, String.raw`\$&`);
 }
